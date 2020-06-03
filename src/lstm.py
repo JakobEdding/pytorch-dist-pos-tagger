@@ -18,9 +18,9 @@ USE_PARAMS_FOR_GPU_TRAINING = True
 
 SEED = 1234
 
-random.seed(SEED)
-torch.manual_seed(SEED)
-torch.backends.cudnn.deterministic = True
+# random.seed(SEED)
+# torch.manual_seed(SEED)
+# torch.backends.cudnn.deterministic = True
 
 TEXT = data.Field(lower = True)  # can have unknown tokens
 UD_TAGS = data.Field(unk_token = None)  # can't have unknown tags
@@ -150,14 +150,12 @@ def run(rank):
     model.embedding.weight.data[PAD_IDX] = torch.zeros(EMBEDDING_DIM)
     TAG_PAD_IDX = UD_TAGS.vocab.stoi[UD_TAGS.pad_token]
 
-    print('rank ', rank, ' initial: ', sum(parameter.sum() for parameter in model.parameters()))
+    print('rank ', rank, ' initial_model: ', sum(parameter.sum() for parameter in model.parameters()))
     # construct DDP model
     ddp_model = DDP(model)
-    print('rank ', rank, ' initial: ', sum(parameter.sum() for parameter in ddp_model.parameters()))
+    print('rank ', rank, ' initial_ddp_model: ', sum(parameter.sum() for parameter in ddp_model.parameters()))
     # define loss function and optimizer
     criterion = nn.CrossEntropyLoss(ignore_index = TAG_PAD_IDX)
-    # TODO: loss_fn stems from example
-    loss_fn = nn.CrossEntropyLoss(ignore_index = TAG_PAD_IDX)
     optimizer = optim.Adam(ddp_model.parameters())
     # TODO: should this stay?
     optimizer.zero_grad()
