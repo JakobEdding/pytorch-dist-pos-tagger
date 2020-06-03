@@ -31,6 +31,10 @@ fields = (("text", TEXT), ("udtags", UD_TAGS), (None, None))
 # TODO: how to do this without an internet connection!?
 train_data, valid_data, test_data = datasets.UDPOS.splits(fields)
 
+# TODO: this limits us to max 3 workers...
+train_data_tuple = train_data.split(split_ratio=0.5, random_state=random.seed(SEED))
+
+
 # TODO: distribute data...
 # print(len(train_data), len(valid_data), len(test_data))
 
@@ -48,8 +52,13 @@ BATCH_SIZE = 128
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-train_iterator, valid_iterator, test_iterator = data.BucketIterator.splits(
-    (train_data, valid_data, test_data),
+train_iterators = data.BucketIterator.splits(
+    train_data_tuple,
+    batch_size = BATCH_SIZE,
+    device = device)
+
+valid_iterator, test_iterator = data.BucketIterator.splits(
+    (valid_data, test_data),
     batch_size = BATCH_SIZE,
     device = device)
 
@@ -127,7 +136,7 @@ def count_parameters(model):
 
 def categorical_accuracy(preds, y, tag_pad_idx):
     """
-    Returns accuracy per batch, i.e. if you gset 8/10 right, this returns 0.8, NOT 8
+    Returns accuracy per batch, i.e. if you get 8/10 right, this returns 0.8, NOT 8
     """
     max_preds = preds.argmax(dim = 1, keepdim = True) # get the index of the max probability
     non_pad_elements = (y != tag_pad_idx).nonzero()
@@ -227,7 +236,7 @@ def run(rank):
     for epoch in range(N_EPOCHS):
         print('starting epoch', epoch)
         start_time = time.time()
-        train_loss, train_acc = train(ddp_model, train_iterator, optimizer, criterion, TAG_PAD_IDX)
+        train_loss, train_acc = train(ddp_model, train_iterators[rank], optimizer, criterion, TAG_PAD_IDX)
         valid_loss, valid_acc = evaluate(ddp_model, valid_iterator, criterion, TAG_PAD_IDX)
         end_time = time.time()
         epoch_mins, epoch_secs = epoch_time(start_time, end_time)
