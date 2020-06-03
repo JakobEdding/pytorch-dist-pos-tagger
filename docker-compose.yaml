@@ -9,13 +9,20 @@ services:
       - net
     volumes:
       - ./src:/home/pi/src
-  slave:
-    hostname: slave
+  slave1:
+    hostname: slave1
     image: jkhlr/pytorch-mpi
     networks:
       - net
     volumes:
       - ./src:/home/pi/src
+  slave2:
+      hostname: slave2
+      image: jkhlr/pytorch-mpi
+      networks:
+        - net
+      volumes:
+        - ./src:/home/pi/src
 
 networks:
   net:

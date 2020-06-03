@@ -32,7 +32,7 @@ fields = (("text", TEXT), ("udtags", UD_TAGS), (None, None))
 train_data, valid_data, test_data = datasets.UDPOS.splits(fields)
 
 # TODO: this limits us to max 3 workers...
-train_data_tuple = train_data.split(split_ratio=0.5, random_state=random.seed(SEED))
+train_data_tuple = train_data.split(split_ratio=[0.3333, 0.3333, 0.3333], random_state=random.seed(SEED))
 
 
 # TODO: distribute data...
