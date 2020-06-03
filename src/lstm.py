@@ -18,9 +18,9 @@ USE_PARAMS_FOR_GPU_TRAINING = True
 
 SEED = 1234
 
-# random.seed(SEED)
-# torch.manual_seed(SEED)
-# torch.backends.cudnn.deterministic = True
+random.seed(SEED)
+torch.manual_seed(SEED)
+torch.backends.cudnn.deterministic = True
 
 TEXT = data.Field(lower = True)  # can have unknown tokens
 UD_TAGS = data.Field(unk_token = None)  # can't have unknown tags
@@ -28,12 +28,14 @@ UD_TAGS = data.Field(unk_token = None)  # can't have unknown tags
 # don't load PTB tags
 fields = (("text", TEXT), ("udtags", UD_TAGS), (None, None))
 
+# TODO: how to do this without an internet connection!?
 train_data, valid_data, test_data = datasets.UDPOS.splits(fields)
 
-print(len(train_data), len(valid_data), len(test_data))
+# TODO: distribute data...
+# print(len(train_data), len(valid_data), len(test_data))
 
-print(vars(train_data.examples[1800])['text'])
-print(vars(train_data.examples[1800])['udtags'])
+# print(vars(train_data.examples[1800])['text'])
+# print(vars(train_data.examples[1800])['udtags'])
 
 MIN_FREQ = 2
 
@@ -125,12 +127,65 @@ def count_parameters(model):
 
 def categorical_accuracy(preds, y, tag_pad_idx):
     """
-    Returns accuracy per batch, i.e. if you get 8/10 right, this returns 0.8, NOT 8
+    Returns accuracy per batch, i.e. if you gset 8/10 right, this returns 0.8, NOT 8
     """
     max_preds = preds.argmax(dim = 1, keepdim = True) # get the index of the max probability
     non_pad_elements = (y != tag_pad_idx).nonzero()
     correct = max_preds[non_pad_elements].squeeze(1).eq(y[non_pad_elements])
     return correct.sum() / torch.FloatTensor([y[non_pad_elements].shape[0]])
+
+def epoch_time(start_time, end_time):
+    elapsed_time = end_time - start_time
+    elapsed_mins = int(elapsed_time / 60)
+    elapsed_secs = int(elapsed_time - (elapsed_mins * 60))
+    return elapsed_mins, elapsed_secs
+
+def train(model, iterator, optimizer, criterion, tag_pad_idx):
+    epoch_loss = 0
+    epoch_acc = 0
+
+    model.train()
+
+    for batch in iterator:
+        text = batch.text
+        tags = batch.udtags
+        optimizer.zero_grad()
+        #text = [sent len, batch size]
+        predictions = model(text)
+        #predictions = [sent len, batch size, output dim]
+        #tags = [sent len, batch size]
+        predictions = predictions.view(-1, predictions.shape[-1])
+        tags = tags.view(-1)
+        #predictions = [sent len * batch size, output dim]
+        #tags = [sent len * batch size]
+        loss = criterion(predictions, tags)
+        acc = categorical_accuracy(predictions, tags, tag_pad_idx)
+        loss.backward()
+        optimizer.step()
+        epoch_loss += loss.item()
+        epoch_acc += acc.item()
+
+    return epoch_loss / len(iterator), epoch_acc / len(iterator)
+
+def evaluate(model, iterator, criterion, tag_pad_idx):
+    epoch_loss = 0
+    epoch_acc = 0
+
+    model.eval()
+
+    with torch.no_grad():
+        for batch in iterator:
+            text = batch.text
+            tags = batch.udtags
+            predictions = model(text)
+            predictions = predictions.view(-1, predictions.shape[-1])
+            tags = tags.view(-1)
+            loss = criterion(predictions, tags)
+            acc = categorical_accuracy(predictions, tags, tag_pad_idx)
+            epoch_loss += loss.item()
+            epoch_acc += acc.item()
+
+    return epoch_loss / len(iterator), epoch_acc / len(iterator)
 
 def run(rank):
     # create local model
@@ -141,14 +196,15 @@ def run(rank):
                         N_LAYERS,
                         BIDIRECTIONAL,
                         DROPOUT,
-                        PAD_IDX).to('cpu')
+                        PAD_IDX)
 
-    # TODO: where should this go!?
     model.apply(init_weights)
 
-    print(f'The model has {count_parameters(model):,} trainable parameters')
+    # print(f'The model has {count_parameters(model):,} trainable parameters')
     model.embedding.weight.data[PAD_IDX] = torch.zeros(EMBEDDING_DIM)
     TAG_PAD_IDX = UD_TAGS.vocab.stoi[UD_TAGS.pad_token]
+
+    model.to(device)
 
     print('rank ', rank, ' initial_model: ', sum(parameter.sum() for parameter in model.parameters()))
     # construct DDP model
@@ -156,33 +212,43 @@ def run(rank):
     print('rank ', rank, ' initial_ddp_model: ', sum(parameter.sum() for parameter in ddp_model.parameters()))
     # define loss function and optimizer
     criterion = nn.CrossEntropyLoss(ignore_index = TAG_PAD_IDX)
+    criterion = criterion.to(device)
     optimizer = optim.Adam(ddp_model.parameters())
-    # TODO: should this stay?
-    optimizer.zero_grad()
 
-    # TODO: send model and criterion to(device) ?
+    if USE_PARAMS_FOR_GPU_TRAINING:
+        N_EPOCHS = 10
+    else:
+        N_EPOCHS = 2
 
+    best_valid_loss = float('inf')
+    overall_start_time = time.time()
     ddp_model.train()
-    for batch in train_iterator:
-        text = batch.text
-        tags = batch.udtags
-        optimizer.zero_grad()
-        predictions = ddp_model(text)
-        predictions = predictions.view(-1, predictions.shape[-1])
-        tags = tags.view(-1)
-        loss = criterion(predictions, tags)
-        acc = categorical_accuracy(predictions, tags, TAG_PAD_IDX)
-        loss.backward()
-        optimizer.step()
-        break
 
-    print('rank ', rank, ' parameters: ', sum(parameter.sum() for parameter in ddp_model.parameters()))
-    sys.exit(0)
+    for epoch in range(N_EPOCHS):
+        print('starting epoch', epoch)
+        start_time = time.time()
+        train_loss, train_acc = train(ddp_model, train_iterator, optimizer, criterion, TAG_PAD_IDX)
+        valid_loss, valid_acc = evaluate(ddp_model, valid_iterator, criterion, TAG_PAD_IDX)
+        end_time = time.time()
+        epoch_mins, epoch_secs = epoch_time(start_time, end_time)
+        if valid_loss < best_valid_loss:
+            best_valid_loss = valid_loss
+            torch.save(ddp_model.state_dict(), 'tut1-model.pt')
+
+        print(f'Epoch: {epoch+1:02} | Epoch Time: {epoch_mins}m {epoch_secs}s')
+        print(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}%')
+        print(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')
+        # print('rank ', rank, ' parameters: ', sum(parameter.sum() for parameter in ddp_model.parameters()))
+
+    overall_end_time = time.time()
+    print('took overall', epoch_time(overall_start_time, overall_end_time))
+    ddp_model.load_state_dict(torch.load('tut1-model.pt'))
+    test_loss, test_acc = evaluate(ddp_model, test_iterator, criterion, TAG_PAD_IDX)
+    print(f'Test Loss: {test_loss:.3f} |  Test Acc: {test_acc*100:.2f}%')
 
 def init_process(fn, backend='mpi'):
     dist.init_process_group(backend)
     fn(dist.get_rank())
-
 
 if __name__ == "__main__":
     init_process(run)
