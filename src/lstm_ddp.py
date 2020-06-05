@@ -18,6 +18,8 @@ USE_PARAMS_FOR_GPU_TRAINING = True
 
 SEED = 1234
 
+DISTRIBUTION_FACTOR = 8
+
 random.seed(SEED)
 torch.manual_seed(SEED)
 torch.backends.cudnn.deterministic = True
@@ -31,9 +33,21 @@ fields = (("text", TEXT), ("udtags", UD_TAGS), (None, None))
 # TODO: how to do this without an internet connection!?
 train_data, valid_data, test_data = datasets.UDPOS.splits(fields)
 
-# TODO: this limits us to max 3 workers...
-train_data_tuple = train_data.split(split_ratio=[0.3333, 0.3333, 0.3333], random_state=random.seed(SEED))
+# inspired by torchtext internals because their splits method is limited to 3 workers... https://github.com/pytorch/text/blob/e70955309ead681f924fecd36d759c37e3fdb1ee/torchtext/data/dataset.py#L325
+def custom_split(examples, number_of_parts):
+    N = len(examples)
+    randperm = random.sample(range(N), len(range(N)))
+    indices = [randperm[int(N * (part / number_of_parts)):int(N * (part+1) / number_of_parts)] for part in range(number_of_parts-1)]
+    indices.append(randperm[int(N * (number_of_parts-1) / number_of_parts):])
+    examples_tuple = tuple([examples[i] for i in index] for index in indices)
+    splits = tuple(data.dataset.Dataset(elem, examples.fields) for elem in examples_tuple if elem)
+    # In case the parent sort key isn't none
+    if examples.sort_key:
+        for subset in splits:
+            subset.sort_key = examples.sort_key
+    return splits
 
+train_data_tuple = custom_split(train_data, DISTRIBUTION_FACTOR)
 
 # TODO: distribute data...
 # print(len(train_data), len(valid_data), len(test_data))
