@@ -8,6 +8,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 
 from torchtext import data
 from torchtext import datasets
+from tqdm import tqdm
 
 import time
 import random
@@ -163,13 +164,13 @@ def epoch_time(start_time, end_time):
     elapsed_secs = int(elapsed_time - (elapsed_mins * 60))
     return elapsed_mins, elapsed_secs
 
-def train(model, iterator, optimizer, criterion, tag_pad_idx):
+def train(model, iterator, optimizer, criterion, tag_pad_idx, rank, epoch):
     epoch_loss = 0
     epoch_acc = 0
 
     model.train()
 
-    for batch in iterator:
+    for batch in tqdm(iterator, desc=f'Rank {rank} processing epoch {epoch} ...'):
         text = batch.text
         tags = batch.udtags
         optimizer.zero_grad()
@@ -248,9 +249,9 @@ def run(rank):
     ddp_model.train()
 
     for epoch in range(N_EPOCHS):
-        print('starting epoch', epoch)
+        print(f'Starting epoch {epoch+1:02}')
         start_time = time.time()
-        train_loss, train_acc = train(ddp_model, train_iterators[rank], optimizer, criterion, TAG_PAD_IDX)
+        train_loss, train_acc = train(ddp_model, train_iterators[rank], optimizer, criterion, TAG_PAD_IDX, rank, epoch)
         valid_loss, valid_acc = evaluate(ddp_model, valid_iterator, criterion, TAG_PAD_IDX)
         end_time = time.time()
         epoch_mins, epoch_secs = epoch_time(start_time, end_time)
