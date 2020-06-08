@@ -10,19 +10,20 @@ from torchtext import data
 from torchtext import datasets
 from tqdm import tqdm
 
+import configparser
 import time
 import random
 import sys
 
+config = configparser.ConfigParser()
+config.read('config.ini')
+config_preprocessing = config['preprocessing']
+config_training = config['training']
+config_model = config['model']
+config_dist = config['dist']
 
-USE_PARAMS_FOR_GPU_TRAINING = True
-
-SEED = 1234
-
-DISTRIBUTION_FACTOR = 2
-
-random.seed(SEED)
-torch.manual_seed(SEED)
+random.seed(config_training['seed'])
+torch.manual_seed(config_training['seed'])
 torch.backends.cudnn.deterministic = True
 
 TEXT = data.Field(lower = True)  # can have unknown tokens
@@ -32,7 +33,7 @@ UD_TAGS = data.Field(unk_token = None)  # can't have unknown tags
 fields = (("text", TEXT), ("udtags", UD_TAGS), (None, None))
 
 # TODO: how to do this without an internet connection!?
-train_data, valid_data, test_data = datasets.UDPOS.splits(fields)
+train_data, valid_data, test_data = datasets.UDPOS.splits(fields, root='~/.data')
 
 # inspired by torchtext internals because their splits method is limited to 3 workers... https://github.com/pytorch/text/blob/e70955309ead681f924fecd36d759c37e3fdb1ee/torchtext/data/dataset.py#L325
 def custom_split(examples, number_of_parts):
@@ -48,7 +49,7 @@ def custom_split(examples, number_of_parts):
             subset.sort_key = examples.sort_key
     return splits
 
-train_data_tuple = custom_split(train_data, DISTRIBUTION_FACTOR)
+train_data_tuple = custom_split(train_data, config_dist['data_parallelism_level'])
 
 # TODO: distribute data...
 # print(len(train_data), len(valid_data), len(test_data))
@@ -56,35 +57,26 @@ train_data_tuple = custom_split(train_data, DISTRIBUTION_FACTOR)
 # print(vars(train_data.examples[1800])['text'])
 # print(vars(train_data.examples[1800])['udtags'])
 
-MIN_FREQ = 2
-
-TEXT.build_vocab(train_data,
-                 min_freq = MIN_FREQ)
+TEXT.build_vocab(train_data, min_freq = config_preprocessing['min_freq'])
 
 UD_TAGS.build_vocab(train_data)
-
-BATCH_SIZE = 128
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 train_iterators = data.BucketIterator.splits(
     train_data_tuple,
-    batch_size = BATCH_SIZE,
+    batch_size = config_training['batch_size'],
     device = device)
 
 valid_iterator, test_iterator = data.BucketIterator.splits(
     (valid_data, test_data),
-    batch_size = BATCH_SIZE,
+    batch_size = config_training['batch_size'],
     device = device)
 
 INPUT_DIM = len(TEXT.vocab)
 
-if USE_PARAMS_FOR_GPU_TRAINING:
-  EMBEDDING_DIM = 100
-  HIDDEN_DIM = 128
-else:
-  EMBEDDING_DIM = 20
-  HIDDEN_DIM = 32
+EMBEDDING_DIM = 100
+HIDDEN_DIM = 128
 
 OUTPUT_DIM = len(UD_TAGS.vocab)
 N_LAYERS = 2
@@ -107,7 +99,14 @@ class BiLSTMPOSTagger(nn.Module):
 
         self.embedding = nn.Embedding(input_dim, embedding_dim, padding_idx = pad_idx)
 
-        self.lstm = nn.LSTM(embedding_dim,
+        if config_model['rnn_layer_type'] == 'lstm':
+            self.rnn = nn.LSTM(embedding_dim,
+                            hidden_dim,
+                            num_layers = n_layers,
+                            bidirectional = bidirectional,
+                            dropout = dropout if n_layers > 1 else 0)
+        elif config_model['rnn_layer_type'] == 'gru':
+            self.rnn = nn.GRU(embedding_dim,
                             hidden_dim,
                             num_layers = n_layers,
                             bidirectional = bidirectional,
@@ -127,7 +126,7 @@ class BiLSTMPOSTagger(nn.Module):
         #embedded = [sent len, batch size, emb dim]
 
         #pass embeddings into LSTM
-        outputs, (hidden, cell) = self.lstm(embedded)
+        outputs, (hidden, cell) = self.rnn(embedded)
 
         #outputs holds the backward and forward hidden states in the final layer
         #hidden and cell are the backward and forward hidden and cell states at the final time-step
@@ -239,16 +238,11 @@ def run(rank):
     criterion = criterion.to(device)
     optimizer = optim.Adam(ddp_model.parameters())
 
-    if USE_PARAMS_FOR_GPU_TRAINING:
-        N_EPOCHS = 10
-    else:
-        N_EPOCHS = 2
-
     best_valid_loss = float('inf')
     overall_start_time = time.time()
     ddp_model.train()
 
-    for epoch in range(N_EPOCHS):
+    for epoch in range(config_training['num_epochs']):
         print(f'Starting epoch {epoch+1:02}')
         start_time = time.time()
         train_loss, train_acc = train(ddp_model, train_iterators[rank], optimizer, criterion, TAG_PAD_IDX, rank, epoch)
