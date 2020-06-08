@@ -5,9 +5,10 @@ import torch.multiprocessing as mp
 import torch.nn as nn
 import torch.optim as optim
 from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
 
-from torchtext import data
-from torchtext import datasets
+import torchtext
 
 import time
 import random
@@ -18,36 +19,51 @@ USE_PARAMS_FOR_GPU_TRAINING = True
 
 SEED = 1234
 
-DISTRIBUTION_FACTOR = 8
+# >= number of raspberry pis / level of data-parallelism
+DISTRIBUTION_FACTOR = 2
 
 random.seed(SEED)
 torch.manual_seed(SEED)
 torch.backends.cudnn.deterministic = True
 
-TEXT = data.Field(lower = True)  # can have unknown tokens
-UD_TAGS = data.Field(unk_token = None)  # can't have unknown tags
+TEXT = torchtext.data.Field(lower = True)  # can have unknown tokens
+UD_TAGS = torchtext.data.Field(unk_token = None)  # can't have unknown tags
 
 # don't load PTB tags
 fields = (("text", TEXT), ("udtags", UD_TAGS), (None, None))
 
 # TODO: how to do this without an internet connection!?
-train_data, valid_data, test_data = datasets.UDPOS.splits(fields)
+train_data, valid_data, test_data = torchtext.datasets.UDPOS.splits(fields)
+# assert type(train_data) == torchtext.data.dataset.Dataset
+
+def generate_batch(batch):
+    import pdb;pdb.set_trace()
+    udtags = torch.tensor([entry.udtags for entry in batch])
+    text = [entry.text for entry in batch]
+    offsets = [0] + [len(entry) for entry in text]
+    # torch.Tensor.cumsum returns the cumulative sum
+    # of elements in the dimension dim.
+    # torch.Tensor([1.0, 2.0, 3.0]).cumsum(dim=0)
+
+    offsets = torch.tensor(offsets[:-1]).cumsum(dim=0)
+    text = torch.cat(text)
+    return text, offsets, udtags
 
 # inspired by torchtext internals because their splits method is limited to 3 workers... https://github.com/pytorch/text/blob/e70955309ead681f924fecd36d759c37e3fdb1ee/torchtext/data/dataset.py#L325
-def custom_split(examples, number_of_parts):
-    N = len(examples)
-    randperm = random.sample(range(N), len(range(N)))
-    indices = [randperm[int(N * (part / number_of_parts)):int(N * (part+1) / number_of_parts)] for part in range(number_of_parts-1)]
-    indices.append(randperm[int(N * (number_of_parts-1) / number_of_parts):])
-    examples_tuple = tuple([examples[i] for i in index] for index in indices)
-    splits = tuple(data.dataset.Dataset(elem, examples.fields) for elem in examples_tuple if elem)
-    # In case the parent sort key isn't none
-    if examples.sort_key:
-        for subset in splits:
-            subset.sort_key = examples.sort_key
-    return splits
+# def custom_split(examples, number_of_parts):
+#     N = len(examples)
+#     randperm = random.sample(range(N), len(range(N)))
+#     indices = [randperm[int(N * (part / number_of_parts)):int(N * (part+1) / number_of_parts)] for part in range(number_of_parts-1)]
+#     indices.append(randperm[int(N * (number_of_parts-1) / number_of_parts):])
+#     examples_tuple = tuple([examples[i] for i in index] for index in indices)
+#     splits = tuple(torchtext.data.dataset.Dataset(elem, examples.fields) for elem in examples_tuple if elem)
+#     # In case the parent sort key isn't none
+#     if examples.sort_key:
+#         for subset in splits:
+#             subset.sort_key = examples.sort_key
+#     return splits
 
-train_data_tuple = custom_split(train_data, DISTRIBUTION_FACTOR)
+# train_data_tuple = custom_split(train_data, DISTRIBUTION_FACTOR)
 
 # TODO: distribute data...
 # print(len(train_data), len(valid_data), len(test_data))
@@ -66,12 +82,12 @@ BATCH_SIZE = 128
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-train_iterators = data.BucketIterator.splits(
-    train_data_tuple,
-    batch_size = BATCH_SIZE,
-    device = device)
+# train_iterators = torchtext.data.BucketIterator.splits(
+#     train_data_tuple,
+#     batch_size = BATCH_SIZE,
+#     device = device)
 
-valid_iterator, test_iterator = data.BucketIterator.splits(
+valid_iterator, test_iterator = torchtext.data.BucketIterator.splits(
     (valid_data, test_data),
     batch_size = BATCH_SIZE,
     device = device)
@@ -247,10 +263,16 @@ def run(rank):
     overall_start_time = time.time()
     ddp_model.train()
 
+    # https://yangkky.github.io/2019/07/08/distributed-pytorch-tutorial.html
+    # TODO
+    train_dist_sampler = DistributedSampler(train_data, num_replicas=DISTRIBUTION_FACTOR, rank=rank)
+    # TODO: pin_memory yes or no?!
+    train_loader = DataLoader(dataset=train_data, batch_size=BATCH_SIZE, pin_memory=True, sampler=train_dist_sampler, collate_fn=generate_batch)
+
     for epoch in range(N_EPOCHS):
         print('starting epoch', epoch)
         start_time = time.time()
-        train_loss, train_acc = train(ddp_model, train_iterators[rank], optimizer, criterion, TAG_PAD_IDX)
+        train_loss, train_acc = train(ddp_model, train_loader, optimizer, criterion, TAG_PAD_IDX)
         valid_loss, valid_acc = evaluate(ddp_model, valid_iterator, criterion, TAG_PAD_IDX)
         end_time = time.time()
         epoch_mins, epoch_secs = epoch_time(start_time, end_time)
