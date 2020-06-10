@@ -14,4 +14,4 @@ echo "RNN_TYPE is $RNN_TYPE"
 # OMPI_MCA_opal_event_include=poll python3 -u ./src/lstm_ddp.py | tee "./logs/out-$OMPI_COMM_WORLD_RANK-$(date +'%m-%d-%Y, %H-%M-%S')"
 
 # this works with `mpirun -n 2 -hostfile ./hostfile --mca orte_fork_agent sh ./train_eval_test.sh`
-OMPI_MCA_opal_event_include=poll python3 -u ./src/lstm_ddp.py 2>&1 | tee "./logs/out-$OMPI_COMM_WORLD_RANK-$(date +'%m-%d-%Y, %H-%M-%S')"
+OMPI_MCA_opal_event_include=poll python3 -u ./src/lstm_ddp.py 2>&1 | tee "../logs/out-$OMPI_COMM_WORLD_RANK-$(date +'%m-%d-%Y, %H-%M-%S')"

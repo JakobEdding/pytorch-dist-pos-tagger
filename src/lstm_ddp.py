@@ -239,7 +239,7 @@ def run(rank):
     # define loss function and optimizer
     criterion = nn.CrossEntropyLoss(ignore_index = TAG_PAD_IDX)
     criterion = criterion.to(device)
-    optimizer = optim.Adam(ddp_model.parameters())
+    optimizer = optim.Adam(ddp_model.parameters(),lr=config_training.getfloat('lr'))
 
     best_valid_loss = float('inf')
     overall_start_time = time.time()
