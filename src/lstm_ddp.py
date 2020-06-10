@@ -14,6 +14,7 @@ import configparser
 import time
 import random
 import sys
+import os
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -22,8 +23,8 @@ config_training = config['training']
 config_model = config['model']
 config_dist = config['dist']
 
-random.seed(config_training['seed'])
-torch.manual_seed(config_training['seed'])
+random.seed(config_training.getint('seed'))
+torch.manual_seed(config_training.getint('seed'))
 torch.backends.cudnn.deterministic = True
 
 TEXT = data.Field(lower = True)  # can have unknown tokens
@@ -49,7 +50,7 @@ def custom_split(examples, number_of_parts):
             subset.sort_key = examples.sort_key
     return splits
 
-train_data_tuple = custom_split(train_data, config_dist['data_parallelism_level'])
+train_data_tuple = custom_split(train_data, config_dist.getint('data_parallelism_level'))
 
 # TODO: distribute data...
 # print(len(train_data), len(valid_data), len(test_data))
@@ -57,7 +58,7 @@ train_data_tuple = custom_split(train_data, config_dist['data_parallelism_level'
 # print(vars(train_data.examples[1800])['text'])
 # print(vars(train_data.examples[1800])['udtags'])
 
-TEXT.build_vocab(train_data, min_freq = config_preprocessing['min_freq'])
+TEXT.build_vocab(train_data, min_freq = config_preprocessing.getint('min_freq'))
 
 UD_TAGS.build_vocab(train_data)
 
@@ -65,12 +66,12 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 train_iterators = data.BucketIterator.splits(
     train_data_tuple,
-    batch_size = config_training['batch_size'],
+    batch_size = config_training.getint('batch_size'),
     device = device)
 
 valid_iterator, test_iterator = data.BucketIterator.splits(
     (valid_data, test_data),
-    batch_size = config_training['batch_size'],
+    batch_size = config_training.getint('batch_size'),
     device = device)
 
 INPUT_DIM = len(TEXT.vocab)
@@ -99,18 +100,20 @@ class BiLSTMPOSTagger(nn.Module):
 
         self.embedding = nn.Embedding(input_dim, embedding_dim, padding_idx = pad_idx)
 
-        if config_model['rnn_layer_type'] == 'lstm':
+        if os.environ['RNN_TYPE'] == 'lstm':
             self.rnn = nn.LSTM(embedding_dim,
                             hidden_dim,
                             num_layers = n_layers,
                             bidirectional = bidirectional,
                             dropout = dropout if n_layers > 1 else 0)
-        elif config_model['rnn_layer_type'] == 'gru':
+        elif os.environ['RNN_TYPE'] == 'gru':
             self.rnn = nn.GRU(embedding_dim,
                             hidden_dim,
                             num_layers = n_layers,
                             bidirectional = bidirectional,
                             dropout = dropout if n_layers > 1 else 0)
+        else:
+            raise Exception('has to be lstm or gru')
 
         self.fc = nn.Linear(hidden_dim * 2 if bidirectional else hidden_dim, output_dim)
 
@@ -242,7 +245,7 @@ def run(rank):
     overall_start_time = time.time()
     ddp_model.train()
 
-    for epoch in range(config_training['num_epochs']):
+    for epoch in range(config_training.getint('num_epochs')):
         print(f'Starting epoch {epoch+1:02}')
         start_time = time.time()
         train_loss, train_acc = train(ddp_model, train_iterators[rank], optimizer, criterion, TAG_PAD_IDX, rank, epoch)
