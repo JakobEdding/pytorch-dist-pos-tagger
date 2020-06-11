@@ -1,5 +1,8 @@
-cp ./config.ini "../logs/config-$(date +'%m-%d-%Y, %H-%M-%S').ini"
-cp ./hostfile "../logs/hostfile-$(date +'%m-%d-%Y, %H-%M-%S')"
+if [ "$OMPI_COMM_WORLD_RANK" = "0" ]
+then
+    cp ./config.ini "../logs/config-$(date +'%m-%d-%Y, %H-%M-%S').ini"
+    cp ./hostfile "../logs/hostfile-$(date +'%m-%d-%Y, %H-%M-%S')"
+fi
 
 # doesn't log stderr so far
 # this kind of works at least when executed like this `mpirun -n 2 -hostfile ./hostfile --mca orte_fork_agent sh ./train_eval_test.sh`
