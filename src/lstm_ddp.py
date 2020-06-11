@@ -6,6 +6,8 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.nn.parallel import DistributedDataParallel as DDP
 
+import horovod.torch as hvd
+
 from torchtext import data
 from torchtext import datasets
 from tqdm import tqdm
@@ -34,7 +36,8 @@ UD_TAGS = data.Field(unk_token = None)  # can't have unknown tags
 fields = (("text", TEXT), ("udtags", UD_TAGS), (None, None))
 
 # TODO: how to do this without an internet connection!?
-train_data, valid_data, test_data = datasets.UDPOS.splits(fields, root='~/.data')
+# import pdb; pdb.set_trace()
+train_data, valid_data, test_data = datasets.UDPOS.splits(fields)
 
 # inspired by torchtext internals because their splits method is limited to 3 workers... https://github.com/pytorch/text/blob/e70955309ead681f924fecd36d759c37e3fdb1ee/torchtext/data/dataset.py#L325
 def custom_split(examples, number_of_parts):
@@ -100,20 +103,20 @@ class BiLSTMPOSTagger(nn.Module):
 
         self.embedding = nn.Embedding(input_dim, embedding_dim, padding_idx = pad_idx)
 
-        if os.environ['RNN_TYPE'] == 'lstm':
+        if False: # os.environ['RNN_TYPE'] == 'lstm':
             self.rnn = nn.LSTM(embedding_dim,
                             hidden_dim,
                             num_layers = n_layers,
                             bidirectional = bidirectional,
                             dropout = dropout if n_layers > 1 else 0)
-        elif os.environ['RNN_TYPE'] == 'gru':
+        else: # os.environ['RNN_TYPE'] == 'gru':
             self.rnn = nn.GRU(embedding_dim,
                             hidden_dim,
                             num_layers = n_layers,
                             bidirectional = bidirectional,
                             dropout = dropout if n_layers > 1 else 0)
-        else:
-            raise Exception('has to be lstm or gru')
+        # else:
+        #     raise Exception('has to be lstm or gru')
 
         self.fc = nn.Linear(hidden_dim * 2 if bidirectional else hidden_dim, output_dim)
 
@@ -213,7 +216,9 @@ def evaluate(model, iterator, criterion, tag_pad_idx):
 
     return epoch_loss / len(iterator), epoch_acc / len(iterator)
 
-def run(rank):
+def run():
+    hvd.init()
+
     # create local model
     model = BiLSTMPOSTagger(INPUT_DIM,
                         EMBEDDING_DIM,
@@ -225,36 +230,40 @@ def run(rank):
                         PAD_IDX)
 
     model.apply(init_weights)
-
+    rank = hvd.rank()
     # print(f'The model has {count_parameters(model):,} trainable parameters')
     model.embedding.weight.data[PAD_IDX] = torch.zeros(EMBEDDING_DIM)
     TAG_PAD_IDX = UD_TAGS.vocab.stoi[UD_TAGS.pad_token]
+
+    hvd.broadcast_parameters(model.state_dict(), root_rank=0)
 
     model.to(device)
 
     print('rank ', rank, ' initial_model: ', sum(parameter.sum() for parameter in model.parameters()))
     # construct DDP model
-    ddp_model = DDP(model)
-    print('rank ', rank, ' initial_ddp_model: ', sum(parameter.sum() for parameter in ddp_model.parameters()))
+    #ddp_model = DDP(model)
+    print('rank ', rank, ' initial_ddp_model: ', sum(parameter.sum() for parameter in model.parameters()))
     # define loss function and optimizer
     criterion = nn.CrossEntropyLoss(ignore_index = TAG_PAD_IDX)
     criterion = criterion.to(device)
-    optimizer = optim.Adam(ddp_model.parameters(),lr=config_training.getfloat('lr'))
+    optimizer = optim.Adam(model.parameters(),lr=config_training.getfloat('lr'))
+
+    optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters())
 
     best_valid_loss = float('inf')
     overall_start_time = time.time()
-    ddp_model.train()
+    #ddp_model.train()
 
     for epoch in range(config_training.getint('num_epochs')):
         print(f'Starting epoch {epoch+1:02}')
         start_time = time.time()
-        train_loss, train_acc = train(ddp_model, train_iterators[rank], optimizer, criterion, TAG_PAD_IDX, rank, epoch)
-        valid_loss, valid_acc = evaluate(ddp_model, valid_iterator, criterion, TAG_PAD_IDX)
+        train_loss, train_acc = train(model, train_iterators[rank], optimizer, criterion, TAG_PAD_IDX, rank, epoch)
+        valid_loss, valid_acc = evaluate(model, valid_iterator, criterion, TAG_PAD_IDX)
         end_time = time.time()
         epoch_mins, epoch_secs = epoch_time(start_time, end_time)
         if valid_loss < best_valid_loss:
             best_valid_loss = valid_loss
-            torch.save(ddp_model.state_dict(), 'tut1-model.pt')
+            torch.save(model.state_dict(), 'tut1-model.pt')
 
         print(f'Epoch: {epoch+1:02} | Epoch Time: {epoch_mins}m {epoch_secs}s')
         print(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}%')
@@ -263,8 +272,8 @@ def run(rank):
 
     overall_end_time = time.time()
     print('took overall', epoch_time(overall_start_time, overall_end_time))
-    ddp_model.load_state_dict(torch.load('tut1-model.pt'))
-    test_loss, test_acc = evaluate(ddp_model, test_iterator, criterion, TAG_PAD_IDX)
+    model.load_state_dict(torch.load('tut1-model.pt'))
+    test_loss, test_acc = evaluate(model, test_iterator, criterion, TAG_PAD_IDX)
     print(f'Test Loss: {test_loss:.3f} |  Test Acc: {test_acc*100:.2f}%')
 
 def init_process(fn, backend='mpi'):
@@ -272,4 +281,5 @@ def init_process(fn, backend='mpi'):
     fn(dist.get_rank())
 
 if __name__ == "__main__":
-    init_process(run)
+    #init_process(run)
+    run()
