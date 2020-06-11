@@ -172,7 +172,7 @@ def train(model, iterator, optimizer, criterion, tag_pad_idx, rank, epoch):
 
     model.train()
 
-    for batch in tqdm(iterator, desc=f'Rank {rank} processing epoch {epoch} ...'):
+    for batch in tqdm(iterator, desc=f'Rank {rank} processing epoch {epoch+1} ...'):
         text = batch.text
         tags = batch.udtags
         optimizer.zero_grad()
