@@ -37,7 +37,7 @@ fields = (("text", TEXT), ("udtags", UD_TAGS), (None, None))
 
 # TODO: how to do this without an internet connection!?
 # import pdb; pdb.set_trace()
-train_data, valid_data, test_data = datasets.UDPOS.splits(fields)
+train_data, valid_data, test_data = datasets.UDPOS.splits(fields, root='~/.data')
 
 # inspired by torchtext internals because their splits method is limited to 3 workers... https://github.com/pytorch/text/blob/e70955309ead681f924fecd36d759c37e3fdb1ee/torchtext/data/dataset.py#L325
 def custom_split(examples, number_of_parts):
@@ -237,7 +237,7 @@ def run():
 
     hvd.broadcast_parameters(model.state_dict(), root_rank=0)
 
-    model.to(device)
+    # model.to(device)
 
     print('rank ', rank, ' initial_model: ', sum(parameter.sum() for parameter in model.parameters()))
     # construct DDP model
@@ -245,7 +245,7 @@ def run():
     print('rank ', rank, ' initial_ddp_model: ', sum(parameter.sum() for parameter in model.parameters()))
     # define loss function and optimizer
     criterion = nn.CrossEntropyLoss(ignore_index = TAG_PAD_IDX)
-    criterion = criterion.to(device)
+    # criterion = criterion.to(device)
     optimizer = optim.Adam(model.parameters(),lr=config_training.getfloat('lr'))
 
     optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters())

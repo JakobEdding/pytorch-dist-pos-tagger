@@ -1,11 +1,5 @@
-cp ./config.ini "./logs/config-$(date +'%m-%d-%Y, %H-%M-%S').ini"
-echo "config.ini"
-cat ./config.ini
-cp ./hostfile "./logs/hostfile-$(date +'%m-%d-%Y, %H-%M-%S')"
-echo "hostfile"
-cat hostfile
-
-echo "RNN_TYPE is $RNN_TYPE"
+cp ./config.ini "../logs/config-$(date +'%m-%d-%Y, %H-%M-%S').ini"
+cp ./hostfile "../logs/hostfile-$(date +'%m-%d-%Y, %H-%M-%S')"
 
 # doesn't log stderr so far
 # this kind of works at least when executed like this `mpirun -n 2 -hostfile ./hostfile --mca orte_fork_agent sh ./train_eval_test.sh`
