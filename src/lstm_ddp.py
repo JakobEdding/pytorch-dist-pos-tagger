@@ -263,7 +263,10 @@ def run():
         epoch_mins, epoch_secs = epoch_time(start_time, end_time)
         if valid_loss < best_valid_loss:
             best_valid_loss = valid_loss
-            torch.save(model.state_dict(), 'tut1-model.pt')
+            if not os.path.exists('../tmp_model'):
+                os.makedirs('../tmp_model')
+            # save model outside sshfs-mounted directory
+            torch.save(model.state_dict(), '../tmp_model/tut1-model.pt')
 
         print(f'Epoch: {epoch+1:02} | Epoch Time: {epoch_mins}m {epoch_secs}s')
         print(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}%')
@@ -272,7 +275,7 @@ def run():
 
     overall_end_time = time.time()
     print('took overall', epoch_time(overall_start_time, overall_end_time))
-    model.load_state_dict(torch.load('tut1-model.pt'))
+    model.load_state_dict(torch.load('../tmp_model/tut1-model.pt'))
     test_loss, test_acc = evaluate(model, test_iterator, criterion, TAG_PAD_IDX)
     print(f'Test Loss: {test_loss:.3f} |  Test Acc: {test_acc*100:.2f}%')
 
