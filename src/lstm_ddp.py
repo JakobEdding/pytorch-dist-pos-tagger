@@ -17,6 +17,7 @@ import time
 import random
 import sys
 import os
+from datetime import datetime
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -175,7 +176,7 @@ def train(model, iterator, optimizer, criterion, tag_pad_idx, rank, epoch):
 
     model.train()
 
-    for batch in tqdm(iterator, desc=f'Rank {rank} processing epoch {epoch} ...'):
+    for batch_idx, batch in enumerate(iterator):
         text = batch.text
         tags = batch.udtags
         optimizer.zero_grad()
@@ -190,7 +191,13 @@ def train(model, iterator, optimizer, criterion, tag_pad_idx, rank, epoch):
         loss = criterion(predictions, tags)
         acc = categorical_accuracy(predictions, tags, tag_pad_idx)
         loss.backward()
+        before = datetime.now()
+        print(f'Epoch: {epoch}, batch {batch_idx}, rank: {rank} | {str(before)} | Done with batch')
         optimizer.step()
+        if (datetime.now() - before).seconds > 10:
+            print('optimizer step took more than 10s')
+        elif (datetime.now() - before).seconds > 5:
+            print('optimizer step took more than 5s')
         epoch_loss += loss.item()
         epoch_acc += acc.item()
 
@@ -248,7 +255,7 @@ def run():
     # criterion = criterion.to(device)
     optimizer = optim.Adam(model.parameters(),lr=config_training.getfloat('lr'))
 
-    optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters())
+    optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters(), op=hvd.Average)
 
     best_valid_loss = float('inf')
     overall_start_time = time.time()
