@@ -8,22 +8,28 @@ services:
     networks:
       - net
     volumes:
-      - ./src:/home/pi/src
+      - .:/home/pi/remote_repo
   slave1:
     hostname: slave1
     image: jkhlr/pytorch-mpi
     networks:
       - net
     volumes:
-      - ./src:/home/pi/src
+      - .:/home/pi/remote_repo
   slave2:
-      hostname: slave2
-      image: jkhlr/pytorch-mpi
-      networks:
-        - net
-      volumes:
-        - ./src:/home/pi/src
-
+    hostname: slave2
+    image: jkhlr/pytorch-mpi
+    networks:
+      - net
+    volumes:
+      - .:/home/pi/remote_repo
+  slave3:
+    hostname: slave3
+    image: jkhlr/pytorch-mpi
+    networks:
+      - net
+    volumes:
+      - .:/home/pi/remote_repo
 networks:
   net:
     driver: bridge

@@ -12,22 +12,26 @@ from torchtext import data
 from torchtext import datasets
 from tqdm import tqdm
 
-import configparser
 import time
 import random
 import sys
 import os
 from datetime import datetime
 
-config = configparser.ConfigParser()
-config.read('config.ini')
-config_preprocessing = config['preprocessing']
-config_training = config['training']
-config_model = config['model']
-config_dist = config['dist']
+# preprocessing
+MIN_FREQ = int(os.environ['SUSML_MIN_FREQ'])
+# training
+RAND_SEED = int(os.environ['SUSML_RAND_SEED'])
+NUM_EPOCHS = int(os.environ['SUSML_NUM_EPOCHS'])
+BATCH_SIZE = int(os.environ['SUSML_BATCH_SIZE'])
+LR = float(os.environ['SUSML_LR'])
+# model
+RNN_LAYER_TYPE = os.environ['SUSML_RNN_LAYER_TYPE']
+# distribution
+PARALLELISM_LEVEL = int(os.environ['SUSML_PARALLELISM_LEVEL'])
 
-random.seed(config_training.getint('seed'))
-torch.manual_seed(config_training.getint('seed'))
+random.seed(RAND_SEED)
+torch.manual_seed(RAND_SEED)
 torch.backends.cudnn.deterministic = True
 
 TEXT = data.Field(lower = True)  # can have unknown tokens
@@ -54,7 +58,7 @@ def custom_split(examples, number_of_parts):
             subset.sort_key = examples.sort_key
     return splits
 
-train_data_tuple = custom_split(train_data, config_dist.getint('data_parallelism_level'))
+train_data_tuple = custom_split(train_data, PARALLELISM_LEVEL)
 
 # TODO: distribute data...
 # print(len(train_data), len(valid_data), len(test_data))
@@ -62,7 +66,7 @@ train_data_tuple = custom_split(train_data, config_dist.getint('data_parallelism
 # print(vars(train_data.examples[1800])['text'])
 # print(vars(train_data.examples[1800])['udtags'])
 
-TEXT.build_vocab(train_data, min_freq = config_preprocessing.getint('min_freq'))
+TEXT.build_vocab(train_data, min_freq = MIN_FREQ)
 
 UD_TAGS.build_vocab(train_data)
 
@@ -70,12 +74,12 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 train_iterators = data.BucketIterator.splits(
     train_data_tuple,
-    batch_size = config_training.getint('batch_size'),
+    batch_size = BATCH_SIZE,
     device = device)
 
 valid_iterator, test_iterator = data.BucketIterator.splits(
     (valid_data, test_data),
-    batch_size = config_training.getint('batch_size'),
+    batch_size = BATCH_SIZE,
     device = device)
 
 INPUT_DIM = len(TEXT.vocab)
@@ -190,14 +194,16 @@ def train(model, iterator, optimizer, criterion, tag_pad_idx, rank, epoch):
         #tags = [sent len * batch size]
         loss = criterion(predictions, tags)
         acc = categorical_accuracy(predictions, tags, tag_pad_idx)
-        loss.backward()
         before = datetime.now()
         print(f'Epoch: {epoch}, batch {batch_idx}, rank: {rank} | {str(before)} | Done with batch')
-        optimizer.step()
+        loss.backward()
         if (datetime.now() - before).seconds > 10:
             print('optimizer step took more than 10s')
         elif (datetime.now() - before).seconds > 5:
             print('optimizer step took more than 5s')
+        elif (datetime.now() - before).seconds > 2:
+            print('optimizer step took more than 2s')
+        optimizer.step()
         epoch_loss += loss.item()
         epoch_acc += acc.item()
 
@@ -253,7 +259,7 @@ def run():
     # define loss function and optimizer
     criterion = nn.CrossEntropyLoss(ignore_index = TAG_PAD_IDX)
     # criterion = criterion.to(device)
-    optimizer = optim.Adam(model.parameters(),lr=config_training.getfloat('lr'))
+    optimizer = optim.Adam(model.parameters(),lr=LR)
 
     optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters(), op=hvd.Average)
 
@@ -261,7 +267,7 @@ def run():
     overall_start_time = time.time()
     #ddp_model.train()
 
-    for epoch in range(config_training.getint('num_epochs')):
+    for epoch in range(NUM_EPOCHS):
         print(f'Starting epoch {epoch+1:02}')
         start_time = time.time()
         train_loss, train_acc = train(model, train_iterators[rank], optimizer, criterion, TAG_PAD_IDX, rank, epoch)
@@ -286,9 +292,9 @@ def run():
     test_loss, test_acc = evaluate(model, test_iterator, criterion, TAG_PAD_IDX)
     print(f'Test Loss: {test_loss:.3f} |  Test Acc: {test_acc*100:.2f}%')
 
-def init_process(fn, backend='mpi'):
-    dist.init_process_group(backend)
-    fn(dist.get_rank())
+# def init_process(fn, backend='mpi'):
+#     dist.init_process_group(backend)
+#     fn(dist.get_rank())
 
 if __name__ == "__main__":
     #init_process(run)
