@@ -112,7 +112,7 @@ class ParameterServer(object):
 #     def __next__(self):
 
 
-@ray.remote
+@ray.remote(num_cpus=3)
 class DataWorker(object):
     def __init__(self, rank):
         self.rank = rank
@@ -123,9 +123,13 @@ class DataWorker(object):
         # don't load PTB tags
         fields = (("text", TEXT), ("udtags", UD_TAGS), (None, None))
 
+        print(f'rank {rank} on ip {ray.services.get_node_ip_address()}')
+
         # TODO: how to do this without an internet connection!?
         # import pdb; pdb.set_trace()
         train_data, valid_data, test_data = datasets.UDPOS.splits(fields, root='~/.data')
+
+        print(f'rank {rank} on ip {ray.services.get_node_ip_address()}')
 
         # inspired by torchtext internals because their splits method is limited to 3 workers... https://github.com/pytorch/text/blob/e70955309ead681f924fecd36d759c37e3fdb1ee/torchtext/data/dataset.py#L325
         def custom_split(examples, number_of_parts):
@@ -142,6 +146,8 @@ class DataWorker(object):
             return splits
 
         train_data_tuple = custom_split(train_data, PARALLELISM_LEVEL)
+
+        print(f'rank {rank} on ip {ray.services.get_node_ip_address()}')
 
         # TODO: distribute data...
         # print(len(train_data), len(valid_data), len(test_data))
@@ -190,7 +196,7 @@ class DataWorker(object):
         self.criterion = nn.CrossEntropyLoss(ignore_index = TAG_PAD_IDX)
 
     def compute_gradients(self, weights):
-        print(f'compute gradients called on node {self.rank}')
+        print(f'computing gradients on node {self.rank} ...')
         self.model.set_weights(weights)
 
         try:
@@ -209,6 +215,7 @@ class DataWorker(object):
         tags = tags.view(-1)
         loss = self.criterion(predictions, tags)
         loss.backward()
+        print(f'finished computing gradients on node {self.rank}')
         return self.model.get_gradients()
 
 def init_weights(m):
@@ -216,7 +223,7 @@ def init_weights(m):
         nn.init.normal_(param.data, mean = 0, std = 0.1)
 
 def run():
-    ray.init(ignore_reinit_error=True, redis_password='5241590000000000')
+    ray.init(address='auto', ignore_reinit_error=True, webui_host='0.0.0.0', redis_password='5241590000000000')
     ps = ParameterServer.remote()
     workers = [DataWorker.remote(i) for i in range(PARALLELISM_LEVEL)]
 
@@ -227,6 +234,7 @@ def run():
             worker.compute_gradients.remote(current_weights) for worker in workers
         ]
         # Calculate update after all gradients are available.
+        print('gathering gradients...')
         current_weights = ps.apply_gradients.remote(*gradients)
         print(f'weights after batch {i}: {ray.get(current_weights)}')
 
