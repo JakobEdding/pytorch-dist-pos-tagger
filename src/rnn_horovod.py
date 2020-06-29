@@ -261,7 +261,7 @@ def run():
     # criterion = criterion.to(device)
     optimizer = optim.Adam(model.parameters(),lr=LR)
 
-    optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters(), op=hvd.Average)
+    optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters(), op=hvd.Adasum)
 
     best_valid_loss = float('inf')
     overall_start_time = time.time()
