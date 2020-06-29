@@ -17,4 +17,4 @@ export SUSML_RNN_LAYER_TYPE=gru
 export SUSML_RNN_LAYER_TYPE=lstm
 
 # distribution / mpi / horovod
-export SUSML_PARALLELISM_LEVEL=6
+export SUSML_PARALLELISM_LEVEL=12
