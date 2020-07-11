@@ -5,6 +5,29 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.nn.parallel import DistributedDataParallel as DDP
 
+import time
+import random
+import sys
+import os
+from datetime import datetime
+
+# preprocessing
+MIN_FREQ = int(os.environ['SUSML_MIN_FREQ'])
+# training
+RAND_SEED = int(os.environ['SUSML_RAND_SEED'])
+NUM_EPOCHS = int(os.environ['SUSML_NUM_EPOCHS'])
+BATCH_SIZE = int(os.environ['SUSML_BATCH_SIZE'])
+LR = float(os.environ['SUSML_LR'])
+# model
+RNN_LAYER_TYPE = os.environ['SUSML_RNN_LAYER_TYPE']
+# distribution
+PARALLELISM_LEVEL = int(os.environ['SUSML_PARALLELISM_LEVEL'])
+
+
+random.seed(RAND_SEED)
+torch.manual_seed(RAND_SEED)
+torch.backends.cudnn.deterministic = True
+
 class BiLSTMPOSTagger(nn.Module):
     def __init__(self,
                  input_dim,

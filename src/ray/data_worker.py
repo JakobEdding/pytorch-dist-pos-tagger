@@ -22,6 +22,7 @@ import sys
 import os
 from datetime import datetime
 
+
 # preprocessing
 MIN_FREQ = int(os.environ['SUSML_MIN_FREQ'])
 # training
@@ -33,76 +34,19 @@ LR = float(os.environ['SUSML_LR'])
 RNN_LAYER_TYPE = os.environ['SUSML_RNN_LAYER_TYPE']
 # distribution
 PARALLELISM_LEVEL = int(os.environ['SUSML_PARALLELISM_LEVEL'])
-print('parallelism level is', PARALLELISM_LEVEL)
+# print('parallelism level is', PARALLELISM_LEVEL)
+
 
 random.seed(RAND_SEED)
 torch.manual_seed(RAND_SEED)
 torch.backends.cudnn.deterministic = True
 
-
-
-@ray.remote
-class ParameterServer(object):
-    def __init__(self):
-        TEXT = data.Field(lower = True)  # can have unknown tokens
-        UD_TAGS = data.Field(unk_token = None)  # can't have unknown tags
-
-        fields = (("text", TEXT), ("udtags", UD_TAGS), (None, None))
-
-        train_data, valid_data, test_data = datasets.UDPOS.splits(fields, root='/home/pi/.data')
-
-        TEXT.build_vocab(train_data, min_freq = MIN_FREQ)
-
-        UD_TAGS.build_vocab(train_data)
-
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-        INPUT_DIM = len(TEXT.vocab)
-
-        EMBEDDING_DIM = 100
-        HIDDEN_DIM = 128
-
-        OUTPUT_DIM = len(UD_TAGS.vocab)
-        N_LAYERS = 2
-        BIDIRECTIONAL = False
-        DROPOUT = 0.25
-        PAD_IDX = TEXT.vocab.stoi[TEXT.pad_token]
-
-
-        self.model = BiLSTMPOSTagger(INPUT_DIM,
-                        EMBEDDING_DIM,
-                        HIDDEN_DIM,
-                        OUTPUT_DIM,
-                        N_LAYERS,
-                        BIDIRECTIONAL,
-                        DROPOUT,
-                        PAD_IDX)
-
-        self.model.apply(init_weights)
-        # print(f'The model has {count_parameters(model):,} trainable parameters')
-        self.model.embedding.weight.data[PAD_IDX] = torch.zeros(EMBEDDING_DIM)
-        TAG_PAD_IDX = UD_TAGS.vocab.stoi[UD_TAGS.pad_token]
-
-        self.optimizer = optim.Adam(self.model.parameters(),lr=LR)
-
-    def apply_gradients(self, *gradients):
-        summed_gradients = [
-            np.stack(gradient_zip).sum(axis=0)
-            for gradient_zip in zip(*gradients)
-        ]
-        self.optimizer.zero_grad()
-        self.model.set_gradients(summed_gradients)
-        self.optimizer.step()
-        return self.model.get_weights()
-
-    def get_weights(self):
-        return self.model.get_weights()
-
-
 @ray.remote(num_cpus=3)
 class DataWorker(object):
     def __init__(self, rank):
         self.rank = rank
+        self.epoch_loss = 0
+        self.epoch_acc = 0
 
         TEXT = data.Field(lower = True)  # can have unknown tokens
         UD_TAGS = data.Field(unk_token = None)  # can't have unknown tags
@@ -168,8 +112,12 @@ class DataWorker(object):
         self.data_iterator = iter(train_iterators[self.rank])
         self.criterion = nn.CrossEntropyLoss(ignore_index = TAG_PAD_IDX)
 
+    # def clear_epoch_metrics():
+    #     self.epoch_loss = 0
+    #     self.epoch_acc = 0
+
     def compute_gradients(self, weights):
-        # print(f'computing gradients on node {self.rank} ...')
+        # print(f'computing gradients for a batch on node {self.rank} at {datetime.now()}...')
         self.model.set_weights(weights)
 
         try:
@@ -178,6 +126,7 @@ class DataWorker(object):
             self.data_iterator = iter(train_iterators[self.rank])
             data, target = next(self.data_iterator)
 
+        before = datetime.now()
         text = batch.text
         tags = batch.udtags
         # TODO: ?
@@ -187,35 +136,11 @@ class DataWorker(object):
         predictions = predictions.view(-1, predictions.shape[-1])
         tags = tags.view(-1)
         loss = self.criterion(predictions, tags)
+        # self.epoch_acc += categorical_accuracy(predictions, tags, tag_pad_idx).item()
+        # acc = categorical_accuracy(predictions, tags, tag_pad_idx)
         loss.backward()
+        # self.epoch_loss += loss.item()
         # print(f'finished computing gradients on node {self.rank}')
+        print(f'computed gradients for a batch on node {self.rank}, took {datetime.now() - before}...')
+
         return self.model.get_gradients()
-
-def init_weights(m):
-    for name, param in m.named_parameters():
-        nn.init.normal_(param.data, mean = 0, std = 0.1)
-
-def run():
-    ray.init(
-        address='auto',
-        ignore_reinit_error=True,
-        webui_host='0.0.0.0',
-        redis_password='5241590000000000'
-    )
-    ps = ParameterServer.remote()
-    workers = [DataWorker.remote(i) for i in range(PARALLELISM_LEVEL)]
-
-    # print("Running synchronous parameter server training.")
-    current_weights = ps.get_weights.remote()
-    for i in range(5):
-        gradients = [
-            worker.compute_gradients.remote(current_weights) for worker in workers
-        ]
-        # print('gathering gradients...')
-        current_weights = ps.apply_gradients.remote(*gradients)
-        print(f'weights after batch {i}: {ray.get(current_weights).keys()}')
-
-    # ray.shutdown()
-
-if __name__ == "__main__":
-    run()
