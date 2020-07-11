@@ -76,6 +76,11 @@ class ParameterServer(object):
             batch_size = BATCH_SIZE,
             device = device)
 
+        self.valid_iterator, self.test_iterator = data.BucketIterator.splits(
+            (valid_data, test_data),
+            batch_size = BATCH_SIZE,
+            device = device)
+
         TEXT.build_vocab(train_data, min_freq = MIN_FREQ)
 
         UD_TAGS.build_vocab(train_data)
@@ -106,9 +111,17 @@ class ParameterServer(object):
         self.model.apply(self.init_weights)
         # print(f'The model has {count_parameters(model):,} trainable parameters')
         self.model.embedding.weight.data[PAD_IDX] = torch.zeros(EMBEDDING_DIM)
-        TAG_PAD_IDX = UD_TAGS.vocab.stoi[UD_TAGS.pad_token]
+        self.TAG_PAD_IDX = UD_TAGS.vocab.stoi[UD_TAGS.pad_token]
+
+        self.criterion = nn.CrossEntropyLoss(ignore_index = self.TAG_PAD_IDX)
 
         self.optimizer = optim.Adam(self.model.parameters(),lr=LR)
+
+    def epoch_time(self, start_time, end_time):
+        elapsed_time = end_time - start_time
+        elapsed_mins = int(elapsed_time / 60)
+        elapsed_secs = int(elapsed_time - (elapsed_mins * 60))
+        return elapsed_mins, elapsed_secs
 
     def apply_gradients(self, *gradients):
         summed_gradients = [
@@ -132,6 +145,8 @@ class ParameterServer(object):
         # epoch_loss = 0
         # epoch_acc = 0
 
+        self.model.train()
+
         current_weights = self.get_weights()
 
         for batch_idx, batch in enumerate(self.train_iterators[0]):
@@ -146,20 +161,57 @@ class ParameterServer(object):
 
         # return epoch_loss / len(iterator), epoch_acc / len(iterator)
 
+    def categorical_accuracy(self, preds, y):
+        """
+        Returns accuracy per batch, i.e. if you get 8/10 right, this returns 0.8, NOT 8
+        """
+        max_preds = preds.argmax(dim = 1, keepdim = True) # get the index of the max probability
+        non_pad_elements = (y != self.TAG_PAD_IDX).nonzero()
+        correct = max_preds[non_pad_elements].squeeze(1).eq(y[non_pad_elements])
+        return correct.sum() / torch.FloatTensor([y[non_pad_elements].shape[0]])
+
+
+    def evaluate(self):
+
+        # tag_pad_idx
+
+        epoch_loss = 0
+        epoch_acc = 0
+
+        # TODO: set model.train() somewhere else before applying workers' gradients!?
+        self.model.eval()
+
+        with torch.no_grad():
+            for batch in self.valid_iterator:
+                text = batch.text
+                tags = batch.udtags
+                predictions = self.model(text)
+                predictions = predictions.view(-1, predictions.shape[-1])
+                tags = tags.view(-1)
+                loss = self.criterion(predictions, tags)
+                acc = self.categorical_accuracy(predictions, tags)
+                epoch_loss += loss.item()
+                epoch_acc += acc.item()
+
+        return epoch_loss / len(self.valid_iterator), epoch_acc / len(self.valid_iterator)
 
 
     def run(self):
+        overall_start_time = time.time()
+
         for epoch in range(NUM_EPOCHS):
             print(f'Starting epoch {epoch+1:02}')
             start_time = time.time()
             # train_loss, train_acc = train()
             self.train()
+            valid_loss, valid_acc = self.evaluate()
             end_time = time.time()
-            epoch_mins, epoch_secs = epoch_time(start_time, end_time)
+            epoch_mins, epoch_secs = self.epoch_time(start_time, end_time)
             print(f'Epoch: {epoch+1:02} | Epoch Time: {epoch_mins}m {epoch_secs}s')
-            print(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}%')
+            # print(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}%')
+            print(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')
 
         overall_end_time = time.time()
-        print('took overall', epoch_time(overall_start_time, overall_end_time))
+        print('took overall', self.epoch_time(overall_start_time, overall_end_time))
 
         return 1

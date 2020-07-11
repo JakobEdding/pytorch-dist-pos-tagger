@@ -78,7 +78,7 @@ class DataWorker(object):
 
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        train_iterators = data.BucketIterator.splits(
+        self.train_iterators = data.BucketIterator.splits(
             train_data_tuple,
             batch_size = BATCH_SIZE,
             device = device)
@@ -109,7 +109,7 @@ class DataWorker(object):
                         DROPOUT,
                         PAD_IDX)
 
-        self.data_iterator = iter(train_iterators[self.rank])
+        self.data_iterator = iter(self.train_iterators[self.rank])
         self.criterion = nn.CrossEntropyLoss(ignore_index = TAG_PAD_IDX)
 
     # def clear_epoch_metrics():
@@ -123,8 +123,8 @@ class DataWorker(object):
         try:
             batch = next(self.data_iterator)
         except StopIteration:  # When the epoch ends, start a new epoch.
-            self.data_iterator = iter(train_iterators[self.rank])
-            data, target = next(self.data_iterator)
+            self.data_iterator = iter(self.train_iterators[self.rank])
+            batch = next(self.data_iterator)
 
         before = datetime.now()
         text = batch.text

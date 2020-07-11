@@ -48,11 +48,16 @@ def run():
         webui_host='0.0.0.0',
         redis_password='5241590000000000'
     )
-    ps = ParameterServer.remote()
-    val = ps.run.remote()
-    print(ray.get(val))
-
-    ray.shutdown()
+    try:
+        ps = ParameterServer.remote()
+        val = ps.run.remote()
+        print(ray.get(val))
+    except Exception as e:
+        raise e
+    finally:
+        print('waiting 10s to allow logs to flush')
+        time.sleep(10)
+        ray.shutdown()
 
 
 if __name__ == "__main__":
