@@ -62,7 +62,7 @@ def run():
     # this still works:
     # for i in range(11):
     # this doesn't work anymore:
-    for i in range(12):
+    for i in range(20):
         weights = [
             worker.compute_new_weight.remote(current_weights) for worker in workers
         ]
