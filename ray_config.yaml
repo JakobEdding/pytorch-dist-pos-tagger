@@ -55,7 +55,7 @@ worker_nodes: {}
 # Files or directories to copy to the head and worker nodes. The format is a
 # dictionary from REMOTE_PATH: LOCAL_PATH, e.g.
 file_mounts: {
-#    "/path1/on/remote/machine": "/path1/on/local/machine",
+   "~/env.sh": "/home/pi/pytorch-dist-pos-tagger/env.sh",
 #    "/path2/on/remote/machine": "/path2/on/local/machine",
 }
 
@@ -79,9 +79,13 @@ worker_setup_commands: []
 head_start_ray_commands:
     - ray stop
     # - ulimit -c unlimited && source ./env.sh && OMP_NUM_THREADS=3 ray start --head --port=6379 --autoscaling-config=~/ray_bootstrap_config.yaml --webui-host=0.0.0.0
-    - ulimit -c unlimited && source ./env.sh && OMP_NUM_THREADS=3 ray start --head --port=6379 --webui-host=0.0.0.0
+    - pwd
+    - ls -lisah
+    - ulimit -c unlimited && source ~/env.sh && OMP_NUM_THREADS=3 ray start --head --port=6379 --webui-host=0.0.0.0
 
 # Command to start ray on worker nodes. You don't need to change this.
 worker_start_ray_commands:
     - ray stop
-    - source ./env.sh && OMP_NUM_THREADS=3 ray start --address=$RAY_HEAD_IP:6379
+    - pwd
+    - ls -lisah
+    - source ~/env.sh && OMP_NUM_THREADS=3 ray start --address=$RAY_HEAD_IP:6379
