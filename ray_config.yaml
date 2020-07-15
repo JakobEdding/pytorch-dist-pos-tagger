@@ -78,14 +78,16 @@ worker_setup_commands: []
 # Command to start ray on the head node. You don't need to change this.
 head_start_ray_commands:
     - ray stop
-    # - ulimit -c unlimited && source ./env.sh && OMP_NUM_THREADS=3 ray start --head --port=6379 --autoscaling-config=~/ray_bootstrap_config.yaml --webui-host=0.0.0.0
-    - pwd
-    - ls -lisah
-    - ulimit -c unlimited && source ~/env.sh && OMP_NUM_THREADS=3 ray start --head --port=6379 --webui-host=0.0.0.0
+    # - ulimit -c unlimited && source ./env.sh && OMP_NUM_THREADS=3 ray start --head --port=6379 --autoscaling-config=~/ray_bootstrap_config.yaml --webui-host=$RAY_HEAD_IP
+    # ???
+    # --webui-host=0.0.0.0
+    - echo "head ip"
+    - echo $RAY_HEAD_IP
+    - ulimit -c unlimited && source ~/env.sh && OMP_NUM_THREADS=3 ray start --head --port=6379 --webui-host=0.0.0.0 --autoscaling-config=~/ray_bootstrap_config.yaml
 
 # Command to start ray on worker nodes. You don't need to change this.
 worker_start_ray_commands:
     - ray stop
-    - pwd
-    - ls -lisah
+    - echo "head ip"
+    - echo $RAY_HEAD_IP
     - source ~/env.sh && OMP_NUM_THREADS=3 ray start --address=$RAY_HEAD_IP:6379
