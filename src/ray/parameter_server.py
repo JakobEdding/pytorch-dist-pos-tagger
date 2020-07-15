@@ -215,3 +215,36 @@ class ParameterServer(object):
         print('took overall', self.epoch_time(overall_start_time, overall_end_time))
 
         return 1
+
+    def run_async(self):
+        overall_start_time = time.time()
+
+        current_weights = self.get_weights()
+
+        gradients = {}
+        for worker in self.workers:
+            gradients[worker.compute_gradients.remote(current_weights)] = worker
+
+        updates = NUM_EPOCHS * len(self.train_iterators[0]) * len(self.workers)
+        for iteration in range(updates):
+            print(f'Starting update {iteration+1:03}/{updates}')
+            start_time = time.time()
+            # train_loss, train_acc = train()
+            ready_gradient_list, _ = ray.wait(list(gradients))
+            ready_gradient_id = ready_gradient_list[0]
+            worker = gradients.pop(ready_gradient_id)
+            self.model.train()
+            current_weights = self.apply_gradients(*[ray.get(ready_gradient_id)])
+            gradients[worker.compute_gradients.remote(current_weights)] = worker
+
+            valid_loss, valid_acc = self.evaluate()
+            end_time = time.time()
+            epoch_mins, epoch_secs = self.epoch_time(start_time, end_time)
+            print(f'Update: {iteration+1:02} | Update Time: {epoch_mins}m {epoch_secs}s')
+            # print(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}%')
+            print(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')
+
+        overall_end_time = time.time()
+        print('took overall', self.epoch_time(overall_start_time, overall_end_time))
+
+        return 1
