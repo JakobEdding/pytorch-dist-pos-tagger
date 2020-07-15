@@ -221,19 +221,22 @@ class ParameterServer(object):
 
         current_weights = self.get_weights()
 
-        gradients = {}
-        for worker in self.workers:
-            gradients[worker.compute_gradients.remote(current_weights)] = worker
 
         updates = len(self.train_iterators[0]) * len(self.workers)
         for epoch in range(NUM_EPOCHS):
+            gradients = {}
+            for worker in self.workers:
+                gradients[worker.compute_gradients.remote(current_weights)] = worker
+
             batches_processed_by_worker = {worker_id: 0 for worker_id in range(PARALLELISM_LEVEL)}
             start_time = time.time()
 
             for iteration in range(updates):
                 print(f'Starting update {iteration+1:03}/{updates}')
                 # train_loss, train_acc = train()
-                ready_gradient_list, _ = ray.wait(list(gradients))
+                ready_gradient_list, rest = ray.wait(list(gradients))
+                if len(ready_gradient_list) == 0:
+                    print(f'wait failed {ready_gradient_list}, {rest}')
                 ready_gradient_id = ready_gradient_list[0]
                 worker = gradients.pop(ready_gradient_id)
                 worker_rank = ray.get(worker.get_rank.remote())
