@@ -116,6 +116,9 @@ class DataWorker(object):
     #     self.epoch_loss = 0
     #     self.epoch_acc = 0
 
+    def get_rank(self):
+        return self.rank
+
     def compute_gradients(self, weights):
         # print(f'computing gradients for a batch on node {self.rank} at {datetime.now()}...')
         self.model.set_weights(weights)

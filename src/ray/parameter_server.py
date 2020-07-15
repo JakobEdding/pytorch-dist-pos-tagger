@@ -236,11 +236,12 @@ class ParameterServer(object):
                 ready_gradient_list, _ = ray.wait(list(gradients))
                 ready_gradient_id = ready_gradient_list[0]
                 worker = gradients.pop(ready_gradient_id)
-                batches_processed_by_worker[worker.rank] += 1
+                worker_rank = ray.get(worker.get_rank.remote())
+                batches_processed_by_worker[worker_rank] += 1
                 self.model.train()
                 current_weights = self.apply_gradients(*[ray.get(ready_gradient_id)])
 
-                if batches_processed_by_worker[worker.rank] <= len(self.train_iterators[0]):
+                if batches_processed_by_worker[worker_rank] <= len(self.train_iterators[0]):
                     gradients[worker.compute_gradients.remote(current_weights)] = worker
 
                 # print(f'Update: {iteration+1:02} | Update Time: {epoch_mins}m {epoch_secs}s')
