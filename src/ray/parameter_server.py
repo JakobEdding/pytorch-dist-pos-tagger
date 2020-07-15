@@ -237,12 +237,15 @@ class ParameterServer(object):
             current_weights = self.apply_gradients(*[ray.get(ready_gradient_id)])
             gradients[worker.compute_gradients.remote(current_weights)] = worker
 
+            if iteration % updates/NUM_EPOCHS == 0:
             valid_loss, valid_acc = self.evaluate()
+                # print(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}%')
+                print(f'Finished epoch {iteration/updates/NUM_EPOCHS} (approximately)')
+                print(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')
+            
             end_time = time.time()
             epoch_mins, epoch_secs = self.epoch_time(start_time, end_time)
             print(f'Update: {iteration+1:02} | Update Time: {epoch_mins}m {epoch_secs}s')
-            # print(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}%')
-            print(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')
 
         overall_end_time = time.time()
         print('took overall', self.epoch_time(overall_start_time, overall_end_time))
