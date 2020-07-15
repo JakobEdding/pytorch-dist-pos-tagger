@@ -225,27 +225,33 @@ class ParameterServer(object):
         for worker in self.workers:
             gradients[worker.compute_gradients.remote(current_weights)] = worker
 
-        updates = NUM_EPOCHS * len(self.train_iterators[0]) * len(self.workers)
-        for iteration in range(updates):
-            print(f'Starting update {iteration+1:03}/{updates}')
+        updates = len(self.train_iterators[0]) * len(self.workers)
+        for epoch in range(NUM_EPOCHS):
+            batches_processed_by_worker = {worker_id: 0 for worker_id in range(PARALLELISM_LEVEL)}
             start_time = time.time()
-            # train_loss, train_acc = train()
-            ready_gradient_list, _ = ray.wait(list(gradients))
-            ready_gradient_id = ready_gradient_list[0]
-            worker = gradients.pop(ready_gradient_id)
-            self.model.train()
-            current_weights = self.apply_gradients(*[ray.get(ready_gradient_id)])
-            gradients[worker.compute_gradients.remote(current_weights)] = worker
 
-            # if iteration % len(self.train_iterators[0]) == 0:
-            #     valid_loss, valid_acc = self.evaluate()
-            #     # print(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}%')
-            #     print(f'Finished epoch {iteration/updates/NUM_EPOCHS} (approximately)')
-            #     print(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')
-            
+            for iteration in range(updates):
+                print(f'Starting update {iteration+1:03}/{updates}')
+                # train_loss, train_acc = train()
+                ready_gradient_list, _ = ray.wait(list(gradients))
+                ready_gradient_id = ready_gradient_list[0]
+                worker = gradients.pop(ready_gradient_id)
+                batches_processed_by_worker[worker.rank] += 1
+                self.model.train()
+                current_weights = self.apply_gradients(*[ray.get(ready_gradient_id)])
+
+                if batches_processed_by_worker[worker.rank] <= len(self.train_iterators[0]):
+                    gradients[worker.compute_gradients.remote(current_weights)] = worker
+
+                # print(f'Update: {iteration+1:02} | Update Time: {epoch_mins}m {epoch_secs}s')
+
             end_time = time.time()
             epoch_mins, epoch_secs = self.epoch_time(start_time, end_time)
-            # print(f'Update: {iteration+1:02} | Update Time: {epoch_mins}m {epoch_secs}s')
+
+            valid_loss, valid_acc = self.evaluate()
+            # print(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}%')
+            print(f'Finished epoch {epoch+1:02}')
+            print(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')
 
         overall_end_time = time.time()
         valid_loss, valid_acc = self.evaluate()
