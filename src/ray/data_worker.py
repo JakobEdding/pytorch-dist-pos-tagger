@@ -102,7 +102,7 @@ class DataWorker(object):
         BIDIRECTIONAL = False
         DROPOUT = 0.25
         PAD_IDX = TEXT.vocab.stoi[TEXT.pad_token]
-        TAG_PAD_IDX = UD_TAGS.vocab.stoi[UD_TAGS.pad_token]
+        self.TAG_PAD_IDX = UD_TAGS.vocab.stoi[UD_TAGS.pad_token]
 
         self.model = BiLSTMPOSTagger(INPUT_DIM,
                         EMBEDDING_DIM,
@@ -114,7 +114,7 @@ class DataWorker(object):
                         PAD_IDX)
 
         self.data_iterator = iter(self.train_iterators[self.rank])
-        self.criterion = nn.CrossEntropyLoss(ignore_index = TAG_PAD_IDX)
+        self.criterion = nn.CrossEntropyLoss(ignore_index = self.TAG_PAD_IDX)
 
     # def clear_epoch_metrics():
     #     self.epoch_loss = 0
