@@ -195,7 +195,7 @@ def train(model, iterator, optimizer, criterion, tag_pad_idx, rank, epoch):
         loss = criterion(predictions, tags)
         acc = categorical_accuracy(predictions, tags, tag_pad_idx)
         before = datetime.now()
-        print(f'Epoch: {epoch}, batch {batch_idx}, rank: {rank} | {str(before)} | Done with batch')
+        print(f'Epoch: {epoch+1}, batch {batch_idx}, rank: {rank} | {str(before)} | Done with batch')
         loss.backward()
         if (datetime.now() - before).seconds > 10:
             print('optimizer step took more than 10s')

@@ -51,7 +51,7 @@ class Trainer:
         self.model.reset_hidden_state()
 
     def _print_loss(self, epoch, loss):
-        print(f'Epoch {epoch} train loss: {loss}')
+        print(f'Epoch {epoch+1} train loss: {loss}')
 
     def _save_checkpoint(self, epoch, loss):
         if self.checkpoint_dir is None:
@@ -60,12 +60,12 @@ class Trainer:
             self.checkpoint_dir.mkdir()
 
         checkpoint = {
-            "epoch": epoch,
+            "epoch": epoch+1,
             "model_state": self.model.state_dict(),
             "optimizer_state": self.optimizer.state_dict(),
             "loss": loss
         }
-        save(checkpoint, self.checkpoint_dir/f'checkpoint-epoch-{epoch}.pt')
+        save(checkpoint, self.checkpoint_dir/f'checkpoint-epoch-{epoch+1}.pt')
 
 
 class DDPTrainer(Trainer):
@@ -74,7 +74,7 @@ class DDPTrainer(Trainer):
         self.rank = get_rank()
         self.world_size = get_world_size()
         super().__init__(
-            model=DistributedDataParallel(model), 
+            model=DistributedDataParallel(model),
             training_set=self._get_split_training_set(training_set),
             checkpoint_dir=checkpoint_dir
         )
@@ -91,9 +91,9 @@ class DDPTrainer(Trainer):
 
     def _reset_hidden_state(self):
         self.model.module.reset_hidden_state()
-    
+
     def _print_loss(self, epoch, loss):
-        print(f'{self.rank}: Epoch {epoch} train loss: {loss}')
+        print(f'{self.rank}: Epoch {epoch+1} train loss: {loss}')
 
     def _save_checkpoint(self, epoch, loss):
         if self.rank != 0:
