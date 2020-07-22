@@ -43,7 +43,8 @@ random.seed(RAND_SEED)
 torch.manual_seed(RAND_SEED)
 torch.backends.cudnn.deterministic = True
 
-@ray.remote(num_cpus=3)
+# won't really use 4 cpu cores because it's limited to 3 by OMP_NUM_THREADS=3
+@ray.remote(num_cpus=4)
 class DataWorker(object):
     def __init__(self, rank):
         self.rank = rank
@@ -86,7 +87,7 @@ class DataWorker(object):
             batch_size = BATCH_SIZE,
             device = device)
 
-        valid_iterator, test_iterator = data.BucketIterator.splits(
+        self.valid_iterator, test_iterator = data.BucketIterator.splits(
             (valid_data, test_data),
             batch_size = BATCH_SIZE,
             device = device)
@@ -121,6 +122,15 @@ class DataWorker(object):
 
     def get_rank(self):
         return self.rank
+
+    def categorical_accuracy(self, preds, y):
+        """
+        Returns accuracy per batch, i.e. if you get 8/10 right, this returns 0.8, NOT 8
+        """
+        max_preds = preds.argmax(dim = 1, keepdim = True) # get the index of the max probability
+        non_pad_elements = (y != self.TAG_PAD_IDX).nonzero()
+        correct = max_preds[non_pad_elements].squeeze(1).eq(y[non_pad_elements])
+        return correct.sum() / torch.FloatTensor([y[non_pad_elements].shape[0]])
 
     def compute_gradients(self, weights):
         # print(f'computing gradients for a batch on node {self.rank} at {datetime.now()}...')

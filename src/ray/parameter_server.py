@@ -41,7 +41,7 @@ random.seed(RAND_SEED)
 torch.manual_seed(RAND_SEED)
 torch.backends.cudnn.deterministic = True
 
-@ray.remote
+@ray.remote(num_cpus=1)
 class ParameterServer(object):
     def __init__(self):
         self.workers = [DataWorker.remote(i) for i in range(PARALLELISM_LEVEL)]
