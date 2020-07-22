@@ -30,6 +30,8 @@ RAND_SEED = int(os.environ['SUSML_RAND_SEED'])
 NUM_EPOCHS = int(os.environ['SUSML_NUM_EPOCHS'])
 BATCH_SIZE = int(os.environ['SUSML_BATCH_SIZE'])
 LR = float(os.environ['SUSML_LR'])
+EVAL_BETWEEN_BATCHES = True if os.environ['SUSML_EVAL_BETWEEN_BATCHES'] == 'true' else False
+EVAL_EVERY_X_BATCHES = int(os.environ['SUSML_EVAL_EVERY_X_BATCHES'])
 # model
 RNN_LAYER_TYPE = os.environ['SUSML_RNN_LAYER_TYPE']
 # distribution
@@ -41,12 +43,14 @@ random.seed(RAND_SEED)
 torch.manual_seed(RAND_SEED)
 torch.backends.cudnn.deterministic = True
 
-@ray.remote(num_cpus=3)
+# won't really use 4 cpu cores because it's limited to 3 by OMP_NUM_THREADS=3
+@ray.remote(num_cpus=4)
 class DataWorker(object):
     def __init__(self, rank):
         self.rank = rank
         self.epoch_loss = 0
         self.epoch_acc = 0
+        self.batch_idx = 1
 
         TEXT = data.Field(lower = True)  # can have unknown tokens
         UD_TAGS = data.Field(unk_token = None)  # can't have unknown tags
@@ -83,7 +87,7 @@ class DataWorker(object):
             batch_size = BATCH_SIZE,
             device = device)
 
-        valid_iterator, test_iterator = data.BucketIterator.splits(
+        self.valid_iterator, test_iterator = data.BucketIterator.splits(
             (valid_data, test_data),
             batch_size = BATCH_SIZE,
             device = device)
@@ -98,7 +102,7 @@ class DataWorker(object):
         BIDIRECTIONAL = False
         DROPOUT = 0.25
         PAD_IDX = TEXT.vocab.stoi[TEXT.pad_token]
-        TAG_PAD_IDX = UD_TAGS.vocab.stoi[UD_TAGS.pad_token]
+        self.TAG_PAD_IDX = UD_TAGS.vocab.stoi[UD_TAGS.pad_token]
 
         self.model = BiLSTMPOSTagger(INPUT_DIM,
                         EMBEDDING_DIM,
@@ -110,11 +114,23 @@ class DataWorker(object):
                         PAD_IDX)
 
         self.data_iterator = iter(self.train_iterators[self.rank])
-        self.criterion = nn.CrossEntropyLoss(ignore_index = TAG_PAD_IDX)
+        self.criterion = nn.CrossEntropyLoss(ignore_index = self.TAG_PAD_IDX)
 
     # def clear_epoch_metrics():
     #     self.epoch_loss = 0
     #     self.epoch_acc = 0
+
+    def get_rank(self):
+        return self.rank
+
+    def categorical_accuracy(self, preds, y):
+        """
+        Returns accuracy per batch, i.e. if you get 8/10 right, this returns 0.8, NOT 8
+        """
+        max_preds = preds.argmax(dim = 1, keepdim = True) # get the index of the max probability
+        non_pad_elements = (y != self.TAG_PAD_IDX).nonzero()
+        correct = max_preds[non_pad_elements].squeeze(1).eq(y[non_pad_elements])
+        return correct.sum() / torch.FloatTensor([y[non_pad_elements].shape[0]])
 
     def compute_gradients(self, weights):
         # print(f'computing gradients for a batch on node {self.rank} at {datetime.now()}...')
@@ -122,9 +138,12 @@ class DataWorker(object):
 
         try:
             batch = next(self.data_iterator)
+            self.batch_idx += 1
         except StopIteration:  # When the epoch ends, start a new epoch.
+            print(f'starting new epoch on rank {self.get_rank()}')
             self.data_iterator = iter(self.train_iterators[self.rank])
             batch = next(self.data_iterator)
+            self.batch_idx = 1
 
         before = datetime.now()
         text = batch.text
@@ -142,5 +161,30 @@ class DataWorker(object):
         # self.epoch_loss += loss.item()
         # print(f'finished computing gradients on node {self.rank}')
         print(f'computed gradients for a batch on node {self.rank}, took {datetime.now() - before}...')
+
+        # TODO: assert hashes before and after evaluating of model.get_gradients() are the same!
+
+        if EVAL_BETWEEN_BATCHES and (self.batch_idx % EVAL_EVERY_X_BATCHES == 0):
+            epoch_loss = 0
+            epoch_acc = 0
+
+            # TODO: set model.train() somewhere else before applying workers' gradients!?
+            self.model.eval()
+
+            with torch.no_grad():
+                for batch in self.valid_iterator:
+                    text = batch.text
+                    tags = batch.udtags
+                    predictions = self.model(text)
+                    predictions = predictions.view(-1, predictions.shape[-1])
+                    tags = tags.view(-1)
+                    loss = self.criterion(predictions, tags)
+                    acc = self.categorical_accuracy(predictions, tags)
+                    epoch_loss += loss.item()
+                    epoch_acc += acc.item()
+
+            valid_loss, valid_acc = (epoch_loss / len(self.valid_iterator), epoch_acc / len(self.valid_iterator))
+            print(f'evaluating after batch {self.batch_idx} on rank {self.get_rank()}: Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')
+            self.model.train()
 
         return self.model.get_gradients()
