@@ -154,7 +154,7 @@ class DataWorker(object):
 
         # TODO: assert hashes before and after evaluating of model.get_gradients() are the same!
 
-        if EVAL_BETWEEN_BATCHES and (batch_idx % EVAL_EVERY_X_BATCHES == 0):
+        if EVAL_BETWEEN_BATCHES and (self.batch_idx % EVAL_EVERY_X_BATCHES == 0):
             epoch_loss = 0
             epoch_acc = 0
 
