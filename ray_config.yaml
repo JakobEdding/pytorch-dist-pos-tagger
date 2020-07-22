@@ -1,0 +1,95 @@
+# adapted from: https://github.com/ray-project/ray/blob/releases/0.8.6/python/ray/autoscaler/local/example-full.yaml
+
+# An unique identifier for the head node and workers of this cluster.
+cluster_name: default
+
+## NOTE: Typically for local clusters, min_workers == initial_workers == max_workers.
+
+# The minimum number of workers nodes to launch in addition to the head
+# node. This number should be >= 0.
+# Typically, min_workers == initial_workers == max_workers.
+min_workers: 1
+# The initial number of worker nodes to launch in addition to the head node.
+# Typically, min_workers == initial_workers == max_workers.
+initial_workers: 1
+
+# The maximum number of workers nodes to launch in addition to the head node.
+# This takes precedence over min_workers.
+# Typically, min_workers == initial_workers == max_workers.
+max_workers: 1
+
+# Autoscaling parameters.
+# Ignore this if min_workers == initial_workers == max_workers.
+autoscaling_mode: default
+target_utilization_fraction: 0.8
+idle_timeout_minutes: 5
+
+# This executes all commands on all nodes in the docker container,
+# and opens all the necessary ports to support the Ray cluster.
+# Empty string means disabled. Assumes Docker is installed.
+# docker:
+#     image: "" # e.g., tensorflow/tensorflow:1.5.0-py3
+#     container_name: "" # e.g. ray_docker
+#     # If true, pulls latest version of image. Otherwise, `docker run` will only pull the image
+#     # if no cached version is present.
+#     pull_before_run: True
+#     run_options: []  # Extra options to pass into "docker run"
+
+# Local specific configuration.
+provider:
+    type: local
+    head_ip: 192.168.178.51
+    worker_ips: [192.168.178.52]
+
+# How Ray will authenticate with newly launched nodes.
+auth:
+    ssh_user: pi
+    ssh_private_key: ./id_rsa
+
+# Leave this empty.
+head_node: {}
+
+# Leave this empty.
+worker_nodes: {}
+
+# Files or directories to copy to the head and worker nodes. The format is a
+# dictionary from REMOTE_PATH: LOCAL_PATH, e.g.
+file_mounts: {
+   "~/env.sh": "/home/pi/pytorch-dist-pos-tagger/env.sh",
+#    "/path2/on/remote/machine": "/path2/on/local/machine",
+}
+
+# List of commands that will be run before `setup_commands`. If docker is
+# enabled, these commands will run outside the container and before docker
+# is setup.
+initialization_commands: []
+
+# List of shell commands to run to set up each nodes.
+setup_commands:
+    - echo $(hostname)
+    # - pip install -U ray
+
+# Custom commands that will be run on the head node after common setup.
+head_setup_commands: []
+
+# Custom commands that will be run on worker nodes after common setup.
+worker_setup_commands: []
+
+# Command to start ray on the head node. You don't need to change this.
+head_start_ray_commands:
+    - ray stop
+    # - ulimit -c unlimited && source ./env.sh && OMP_NUM_THREADS=3 ray start --head --port=6379 --autoscaling-config=~/ray_bootstrap_config.yaml --webui-host=$RAY_HEAD_IP
+    # ???
+    # --webui-host=0.0.0.0
+    - echo "doing stuff on head"
+    - export RAY_HEAD_IP='192.168.178.51'
+    - echo "head ip $RAY_HEAD_IP $SHELL"
+    - ulimit -c unlimited && source ~/env.sh && OMP_NUM_THREADS=3 ray start --head --port=6379 --webui-host=0.0.0.0 --autoscaling-config=~/ray_bootstrap_config.yaml
+
+# Command to start ray on worker nodes. You don't need to change this.
+worker_start_ray_commands:
+    - ray stop
+    - echo "doing stuff on workers"
+    - export RAY_HEAD_IP='192.168.178.51'
+    - echo "head ip $RAY_HEAD_IP $SHELL"
+    - source ~/env.sh && OMP_NUM_THREADS=3 ray start --address=192.168.178.51:6379
