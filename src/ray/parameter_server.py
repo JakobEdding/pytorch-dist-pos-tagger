@@ -10,7 +10,7 @@ import ray
 
 import numpy as np
 
-from bilstm_pos_tagger import BiLSTMPOSTagger
+from gru_pos_tagger import GRUPOSTagger
 
 from torchtext import data
 from torchtext import datasets
@@ -97,7 +97,7 @@ class ParameterServer(object):
         PAD_IDX = TEXT.vocab.stoi[TEXT.pad_token]
 
 
-        self.model = BiLSTMPOSTagger(INPUT_DIM,
+        self.model = GRUPOSTagger(INPUT_DIM,
                         EMBEDDING_DIM,
                         HIDDEN_DIM,
                         OUTPUT_DIM,

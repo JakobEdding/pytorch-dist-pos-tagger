@@ -10,7 +10,7 @@ import ray
 
 import numpy as np
 
-from bilstm_pos_tagger import BiLSTMPOSTagger
+from gru_pos_tagger import GRUPOSTagger
 
 from torchtext import data
 from torchtext import datasets
