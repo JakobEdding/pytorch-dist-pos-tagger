@@ -49,7 +49,7 @@ def run():
     )
     try:
         ps = ParameterServer.remote()
-        val = ps.run_async.remote()
+        val = ps.run.remote()
         print(ray.get(val))
     except Exception as e:
         raise e

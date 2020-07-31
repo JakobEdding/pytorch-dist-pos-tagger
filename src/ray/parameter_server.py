@@ -214,7 +214,7 @@ class ParameterServer(object):
             valid_loss, valid_acc = self.evaluate(self.valid_iterator, 'valid', epoch)
 
             epoch_end_time = time.time()
-            epoch_mins, epoch_secs = self.self.diff_time(epoch_start_time, epoch_end_time)
+            epoch_mins, epoch_secs = self.diff_time(epoch_start_time, epoch_end_time)
 
             print(f'Epoch: {epoch+1:02} | Epoch Time: {epoch_mins}m {epoch_secs}s')
             print(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')

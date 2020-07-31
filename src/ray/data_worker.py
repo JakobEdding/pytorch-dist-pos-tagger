@@ -42,7 +42,8 @@ torch.manual_seed(RAND_SEED)
 torch.backends.cudnn.deterministic = True
 
 # won't really use 4 cpu cores because it's limited to 3 by OMP_NUM_THREADS=3
-@ray.remote(num_cpus=4)
+# @ray.remote(num_cpus=4)
+@ray.remote(num_cpus=3)
 class DataWorker(object):
     def __init__(self, rank):
         self.rank = rank
