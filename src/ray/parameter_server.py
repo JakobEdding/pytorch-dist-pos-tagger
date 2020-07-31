@@ -219,7 +219,7 @@ class ParameterServer(object):
             print(f'Epoch: {epoch+1:02} | Epoch Time: {epoch_mins}m {epoch_secs}s')
             print(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')
 
-        test_loss, test_acc = self.evaluate(self.test_iterator, 'test', 'test')
+        test_loss, test_acc = self.evaluate(self.test_iterator, 'test', -1)
         print(f'Test Loss: {test_loss:.3f} |  Test Acc: {test_acc*100:.2f}%')
 
         total_end_time = time.time()
@@ -276,7 +276,7 @@ class ParameterServer(object):
             print(f'Epoch: {epoch+1:02} | Epoch Time: {epoch_mins}m {epoch_secs}s')
             print(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')
 
-        test_loss, test_acc = self.evaluate(self.test_iterator, 'test', 'test')
+        test_loss, test_acc = self.evaluate(self.test_iterator, 'test', -1)
         print(f'Test Loss: {test_loss:.3f} |  Test Acc: {test_acc*100:.2f}%')
 
         total_end_time = time.time()

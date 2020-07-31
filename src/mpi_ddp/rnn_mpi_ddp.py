@@ -268,7 +268,7 @@ def run(rank):
         # print('rank ', rank, ' parameters: ', sum(parameter.sum() for parameter in ddp_model.parameters()))
 
     ddp_model.load_state_dict(torch.load('tut1-model.pt'))
-    test_loss, test_acc = evaluate(ddp_model, test_iterator, criterion, TAG_PAD_IDX, 'test', 'test')
+    test_loss, test_acc = evaluate(ddp_model, test_iterator, criterion, TAG_PAD_IDX, 'test', -1)
     print(f'Test Loss: {test_loss:.3f} |  Test Acc: {test_acc*100:.2f}%')
 
     total_end_time = time.time()
