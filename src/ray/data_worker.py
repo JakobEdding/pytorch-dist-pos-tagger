@@ -32,8 +32,6 @@ BATCH_SIZE = int(os.environ['SUSML_BATCH_SIZE'])
 LR = float(os.environ['SUSML_LR'])
 EVAL_BETWEEN_BATCHES = True if os.environ['SUSML_EVAL_BETWEEN_BATCHES'] == 'true' else False
 EVAL_EVERY_X_BATCHES = int(os.environ['SUSML_EVAL_EVERY_X_BATCHES'])
-# model
-RNN_LAYER_TYPE = os.environ['SUSML_RNN_LAYER_TYPE']
 # distribution
 PARALLELISM_LEVEL = int(os.environ['SUSML_PARALLELISM_LEVEL'])
 # print('parallelism level is', PARALLELISM_LEVEL)

@@ -14,9 +14,5 @@ export SUSML_LR=0.001
 export SUSML_EVAL_BETWEEN_BATCHES=true
 export SUSML_EVAL_EVERY_X_BATCHES=2
 
-# model
-export SUSML_RNN_LAYER_TYPE=gru
-export SUSML_RNN_LAYER_TYPE=lstm
-
 # distribution / mpi / horovod
 export SUSML_PARALLELISM_LEVEL=2

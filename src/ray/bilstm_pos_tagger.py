@@ -18,8 +18,6 @@ RAND_SEED = int(os.environ['SUSML_RAND_SEED'])
 NUM_EPOCHS = int(os.environ['SUSML_NUM_EPOCHS'])
 BATCH_SIZE = int(os.environ['SUSML_BATCH_SIZE'])
 LR = float(os.environ['SUSML_LR'])
-# model
-RNN_LAYER_TYPE = os.environ['SUSML_RNN_LAYER_TYPE']
 # distribution
 PARALLELISM_LEVEL = int(os.environ['SUSML_PARALLELISM_LEVEL'])
 
