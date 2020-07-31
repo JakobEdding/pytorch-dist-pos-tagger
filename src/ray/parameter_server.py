@@ -115,7 +115,7 @@ class ParameterServer(object):
 
         self.optimizer = optim.Adam(self.model.parameters(),lr=LR)
 
-    def epoch_time(self, start_time, end_time):
+    def diff_time(self, start_time, end_time):
         elapsed_time = end_time - start_time
         elapsed_mins = int(elapsed_time / 60)
         elapsed_secs = int(elapsed_time - (elapsed_mins * 60))
@@ -169,18 +169,19 @@ class ParameterServer(object):
         return correct.sum() / torch.FloatTensor([y[non_pad_elements].shape[0]])
 
 
-    def evaluate(self):
+    def evaluate(self, iterator):
 
         # tag_pad_idx
 
         epoch_loss = 0
         epoch_acc = 0
+        start_time = time.time()
 
         # TODO: set model.train() somewhere else before applying workers' gradients!?
         self.model.eval()
 
         with torch.no_grad():
-            for batch in self.valid_iterator:
+            for batch in iterator:
                 text = batch.text
                 tags = batch.udtags
                 predictions = self.model(text)
@@ -191,43 +192,60 @@ class ParameterServer(object):
                 epoch_loss += loss.item()
                 epoch_acc += acc.item()
 
-        return epoch_loss / len(self.valid_iterator), epoch_acc / len(self.valid_iterator)
+        end_time = time.time()
+        mins, secs = diff_time(start_time, end_time)
+        print(f'Epoch {epoch+1:02} evaluate time: {mins}m {secs}s')
 
+        return epoch_loss / len(iterator), epoch_acc / len(iterator)
 
     def run(self):
-        overall_start_time = time.time()
+        total_start_time = time.time()
 
         for epoch in range(NUM_EPOCHS):
             print(f'Starting epoch {epoch+1:02}')
-            start_time = time.time()
-            # train_loss, train_acc = train()
+            epoch_start_time = time.time()
+
+            train_start_time = time.time()
             self.train()
-            valid_loss, valid_acc = self.evaluate()
-            end_time = time.time()
-            epoch_mins, epoch_secs = self.epoch_time(start_time, end_time)
+            train_end_time = time.time()
+            train_mins, train_secs = diff_time(train_start_time, train_end_time)
+            print(f'Epoch {epoch+1:02} train time: {train_mins}m {train_secs}s')
+
+            valid_loss, valid_acc = self.evaluate(self.valid_iterator)
+
+            epoch_end_time = time.time()
+            epoch_mins, epoch_secs = diff_time(epoch_start_time, epoch_end_time)
+
             print(f'Epoch: {epoch+1:02} | Epoch Time: {epoch_mins}m {epoch_secs}s')
-            # print(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}%')
             print(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')
 
-        overall_end_time = time.time()
-        print('took overall', self.epoch_time(overall_start_time, overall_end_time))
+        print('next "evaluate" is actually test!')
+        test_loss, test_acc = self.evaluate(self.test_iterator)
+        print(f'Test Loss: {test_loss:.3f} |  Test Acc: {test_acc*100:.2f}%')
+
+        total_end_time = time.time()
+        total_mins, total_secs = diff_time(total_start_time, total_end_time)
+        print(f'took overall: {total_mins}m {total_secs}s')
 
         return 1
 
     def run_async(self):
-        overall_start_time = time.time()
+        total_start_time = time.time()
 
         current_weights = self.get_weights()
 
 
         updates = len(self.train_iterators[0]) * len(self.workers)
         for epoch in range(NUM_EPOCHS):
+            print(f'Starting epoch {epoch+1:02}')
+            epoch_start_time = time.time()
+
+            train_start_time = time.time()
             gradients = {}
             for worker in self.workers:
                 gradients[worker.compute_gradients.remote(current_weights)] = worker
 
             batches_processed_by_worker = {worker_id: 0 for worker_id in range(PARALLELISM_LEVEL)}
-            start_time = time.time()
 
             for iteration in range(updates):
                 print(f'Starting update {iteration+1:03}/{updates}')
@@ -247,17 +265,24 @@ class ParameterServer(object):
 
                 # print(f'Update: {iteration+1:02} | Update Time: {epoch_mins}m {epoch_secs}s')
 
-            end_time = time.time()
-            epoch_mins, epoch_secs = self.epoch_time(start_time, end_time)
+            train_end_time = time.time()
+            train_mins, train_secs = diff_time(train_start_time, train_end_time)
+            print(f'Epoch {epoch+1:02} train time: {train_mins}m {train_secs}s')
 
-            valid_loss, valid_acc = self.evaluate()
-            # print(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc*100:.2f}%')
-            print(f'Finished epoch {epoch+1:02}')
+            valid_loss, valid_acc = self.evaluate(self.valid_iterator)
+
+            epoch_end_time = time.time()
+            epoch_mins, epoch_secs = diff_time(epoch_start_time, epoch_end_time)
+
+            print(f'Epoch: {epoch+1:02} | Epoch Time: {epoch_mins}m {epoch_secs}s')
             print(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')
 
-        overall_end_time = time.time()
-        valid_loss, valid_acc = self.evaluate()
-        print(f'Final Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')
-        print('took overall', self.epoch_time(overall_start_time, overall_end_time))
+        print('next "evaluate" is actually test!')
+        test_loss, test_acc = self.evaluate(self.test_iterator)
+        print(f'Test Loss: {test_loss:.3f} |  Test Acc: {test_acc*100:.2f}%')
+
+        total_end_time = time.time()
+        total_mins, total_secs = diff_time(total_start_time, total_end_time)
+        print(f'took overall: {total_mins}m {total_secs}s')
 
         return 1

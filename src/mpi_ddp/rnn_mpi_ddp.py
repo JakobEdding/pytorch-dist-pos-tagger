@@ -153,7 +153,7 @@ def categorical_accuracy(preds, y, tag_pad_idx):
     correct = max_preds[non_pad_elements].squeeze(1).eq(y[non_pad_elements])
     return correct.sum() / torch.FloatTensor([y[non_pad_elements].shape[0]])
 
-def epoch_time(start_time, end_time):
+def diff_time(start_time, end_time):
     elapsed_time = end_time - start_time
     elapsed_mins = int(elapsed_time / 60)
     elapsed_secs = int(elapsed_time - (elapsed_mins * 60))
@@ -162,6 +162,7 @@ def epoch_time(start_time, end_time):
 def train(model, iterator, optimizer, criterion, tag_pad_idx, rank, epoch):
     epoch_loss = 0
     epoch_acc = 0
+    start_time = time.time()
 
     model.train()
 
@@ -184,11 +185,16 @@ def train(model, iterator, optimizer, criterion, tag_pad_idx, rank, epoch):
         epoch_loss += loss.item()
         epoch_acc += acc.item()
 
+    end_time = time.time()
+    mins, secs = diff_time(start_time, end_time)
+    print(f'Epoch {epoch+1:02} train time: {mins}m {secs}s')
+
     return epoch_loss / len(iterator), epoch_acc / len(iterator)
 
 def evaluate(model, iterator, criterion, tag_pad_idx):
     epoch_loss = 0
     epoch_acc = 0
+    start_time = time.time()
 
     model.eval()
 
@@ -203,6 +209,10 @@ def evaluate(model, iterator, criterion, tag_pad_idx):
             acc = categorical_accuracy(predictions, tags, tag_pad_idx)
             epoch_loss += loss.item()
             epoch_acc += acc.item()
+
+    end_time = time.time()
+    mins, secs = diff_time(start_time, end_time)
+    print(f'Epoch {epoch+1:02} evaluate time: {mins}m {secs}s')
 
     return epoch_loss / len(iterator), epoch_acc / len(iterator)
 
@@ -235,16 +245,19 @@ def run(rank):
     optimizer = optim.Adam(ddp_model.parameters(),lr=LR)
 
     best_valid_loss = float('inf')
-    overall_start_time = time.time()
     ddp_model.train()
+    total_start_time = time.time()
 
     for epoch in range(NUM_EPOCHS):
         print(f'Starting epoch {epoch+1:02}')
-        start_time = time.time()
+        epoch_start_time = time.time()
+
         train_loss, train_acc = train(ddp_model, train_iterators[rank], optimizer, criterion, TAG_PAD_IDX, rank, epoch)
         valid_loss, valid_acc = evaluate(ddp_model, valid_iterator, criterion, TAG_PAD_IDX)
-        end_time = time.time()
-        epoch_mins, epoch_secs = epoch_time(start_time, end_time)
+
+        epoch_end_time = time.time()
+        epoch_mins, epoch_secs = diff_time(epoch_start_time, epoch_end_time)
+
         if valid_loss < best_valid_loss:
             best_valid_loss = valid_loss
             torch.save(ddp_model.state_dict(), 'tut1-model.pt')
@@ -254,11 +267,14 @@ def run(rank):
         print(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')
         # print('rank ', rank, ' parameters: ', sum(parameter.sum() for parameter in ddp_model.parameters()))
 
-    overall_end_time = time.time()
-    print('took overall', epoch_time(overall_start_time, overall_end_time))
     ddp_model.load_state_dict(torch.load('tut1-model.pt'))
+    print('next "evaluate" is actually test!')
     test_loss, test_acc = evaluate(ddp_model, test_iterator, criterion, TAG_PAD_IDX)
     print(f'Test Loss: {test_loss:.3f} |  Test Acc: {test_acc*100:.2f}%')
+
+    total_end_time = time.time()
+    total_mins, total_secs = diff_time(total_start_time, total_end_time)
+    print(f'took overall: {total_mins}m {total_secs}s')
 
 def init_process(fn, backend='mpi'):
     dist.init_process_group(backend)
