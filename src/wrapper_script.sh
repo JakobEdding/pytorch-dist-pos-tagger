@@ -30,6 +30,7 @@ mpirun -x SUSML_DIR_PATH=$SUSML_DIR_PATH -n $SUSML_PARALLELISM_LEVEL --map-by so
 # source ~/susml/jakob_jonas/bin/activate && ray stop && source ./src/env.sh && ray start --address='192.168.178.51:6379' --redis-password='5241590000000000'
 
 # Start:
+# TODO: start sar !?
 # python3 src/ray/start.py 2>&1 | tee "$SUSML_DIR_PATH/0.out"
 # !!! copy ray logs manually a
 
