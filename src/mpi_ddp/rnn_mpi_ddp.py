@@ -36,7 +36,7 @@ UD_TAGS = data.Field(unk_token = None)  # can't have unknown tags
 fields = (("text", TEXT), ("udtags", UD_TAGS), (None, None))
 
 # TODO: how to do this without an internet connection!?
-train_data, valid_data, test_data = datasets.UDPOS.splits(fields, root='~/.data')
+train_data, valid_data, test_data = datasets.UDPOS.splits(fields, root='/home/pi/.data')
 
 # inspired by torchtext internals because their splits method is limited to 3 workers... https://github.com/pytorch/text/blob/e70955309ead681f924fecd36d759c37e3fdb1ee/torchtext/data/dataset.py#L325
 def custom_split(examples, number_of_parts):
