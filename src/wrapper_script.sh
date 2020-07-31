@@ -13,8 +13,7 @@ git diff --staged > "$SUSML_DIR_PATH/git_diff_staged.txt"
 
 source ./src/env.sh
 
-horovodrun --hostfile hostfile -np $SUSML_PARALLELISM_LEVEL --mpi-args="--map-by socket:pe=3 -x SUSML_DIR_PATH=$SUSML_DIR_PATH" bash ./src/train_eval_test.sh
-#mpirun -x SUSML_DIR_PATH=$SUSML_DIR_PATH -n $SUSML_PARALLELISM_LEVEL --map-by socket:pe=3 -hostfile ./hostfile --mca orte_fork_agent bash ./train_eval_test.sh
-# horovodrun
+# mpirun -x SUSML_DIR_PATH=$SUSML_DIR_PATH -n $SUSML_PARALLELISM_LEVEL --map-by socket:pe=3 -hostfile ./hostfile --mca orte_fork_agent bash ./src/train_eval_test.sh
+horovodrun --hostfile ./hostfile -np $SUSML_PARALLELISM_LEVEL --mpi-args="--map-by socket:pe=3 -x SUSML_DIR_PATH=$SUSML_DIR_PATH" bash ./src/train_eval_test.sh
 
 unset "${!SUSML_@}"
