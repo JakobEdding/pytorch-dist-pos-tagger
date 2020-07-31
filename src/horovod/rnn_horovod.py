@@ -260,7 +260,7 @@ def run():
     # criterion = criterion.to(device)
     optimizer = optim.Adam(model.parameters(),lr=LR)
 
-    optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters(), op=hvd.Average)
+    optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters(), op=hvd.Adasum)
 
     best_valid_loss = float('inf')
     total_start_time = time.time()
@@ -294,7 +294,7 @@ def run():
 
     total_end_time = time.time()
     total_mins, total_secs = diff_time(total_start_time, total_end_time)
-    print('took overall', diff_time(total_mins, total_secs))
+    print(f'took overall: {total_mins}m {total_secs}s')
 
 
 # def init_process(fn, backend='mpi'):
