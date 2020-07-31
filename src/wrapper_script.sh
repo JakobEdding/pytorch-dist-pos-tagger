@@ -14,6 +14,15 @@ git diff --staged > "$SUSML_DIR_PATH/git_diff_staged.txt"
 source ./src/env.sh
 
 # mpirun -x SUSML_DIR_PATH=$SUSML_DIR_PATH -n $SUSML_PARALLELISM_LEVEL --map-by socket:pe=3 -hostfile ./hostfile --mca orte_fork_agent bash ./src/train_eval_test.sh
-horovodrun --hostfile ./hostfile -np $SUSML_PARALLELISM_LEVEL --mpi-args="--map-by socket:pe=3 -x SUSML_DIR_PATH=$SUSML_DIR_PATH" bash ./src/train_eval_test.sh
+
+# horovodrun --hostfile ./hostfile -np $SUSML_PARALLELISM_LEVEL --mpi-args="--map-by socket:pe=3 -x SUSML_DIR_PATH=$SUSML_DIR_PATH" bash ./src/train_eval_test.sh
+
+# MASTER:
+# source ~/susml/jakob_jonas/bin/activate && ray stop && source ./src/env.sh && ray start --head --port=6379
+# SLAVES: (TODO: change master address)
+# source ~/susml/jakob_jonas/bin/activate && ray stop && source ./src/env.sh && ray start --address='192.168.178.51:6379' --redis-password='5241590000000000'
+# START:
+python3 src/ray/start.py 2>&1 | tee "$SUSML_DIR_PATH/0.out"
+# !!! copy ray logs manually a
 
 unset "${!SUSML_@}"
