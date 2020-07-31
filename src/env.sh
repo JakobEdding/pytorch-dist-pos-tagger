@@ -15,4 +15,4 @@ export SUSML_EVAL_BETWEEN_BATCHES=false
 export SUSML_EVAL_EVERY_X_BATCHES=2
 
 # distribution / mpi / horovod
-export SUSML_PARALLELISM_LEVEL=8
+export SUSML_PARALLELISM_LEVEL=12

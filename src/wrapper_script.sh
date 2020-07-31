@@ -18,25 +18,33 @@ source ./src/env.sh
 
 
 # HOROVOD:
-if [[ $(hostname) == pi* ]]
-then
-    echo "am on pi cluster"
-    source ~/susml/jakob_jonas/bin/activate
-fi
-horovodrun --hostfile ./hostfile -np $SUSML_PARALLELISM_LEVEL --mpi-args="--map-by socket:pe=3 -x SUSML_DIR_PATH=$SUSML_DIR_PATH" bash ./src/train_eval_test.sh
+# if [[ $(hostname) == pi* ]]
+# then
+#     echo "am on pi cluster"
+#     source ~/susml/jakob_jonas/bin/activate
+# fi
+# horovodrun --hostfile ./hostfile -np $SUSML_PARALLELISM_LEVEL --mpi-args="--map-by socket:pe=3 -x SUSML_DIR_PATH=$SUSML_DIR_PATH" bash ./src/train_eval_test.sh
 
 
 # RAY:
 
-# Master:
-# source ~/susml/jakob_jonas/bin/activate && ray stop && source ./src/env.sh && ray start --head --port=6379
+# MASTER:
+# source ~/susml/jakob_jonas/bin/activate
+# ray stop && source ./src/env.sh && OMP_NUM_THREADS=3 ray start --head --port=6379 --webui-host='0.0.0.0'
+# sar 1 > "ray-sar.out" &
+# SAR_PID=$!
 
-# Slaves: (TODO: change master address)
-# source ~/susml/jakob_jonas/bin/activate && ray stop && source ./src/env.sh && ray start --address='192.168.178.51:6379' --redis-password='5241590000000000'
+# SLAVES: (TODO: change master address)
+# source ~/susml/jakob_jonas/bin/activate
+# ray stop && source ./src/env.sh && OMP_NUM_THREADS=3 ray start --address='10.42.0.50:6379' --redis-password='5241590000000000'
+# sar 1 > "ray-sar.out" &
+# SAR_PID=$!
 
-# Start:
-# TODO: start sar !?
-# python3 src/ray/start.py 2>&1 | tee "$SUSML_DIR_PATH/0.out"
-# !!! copy ray logs manually a
+# START:
+python3 src/ray/start.py 2>&1 | tee "$SUSML_DIR_PATH/0.out"
+
+# STOP:
+# kill $SAR_PID
+# TODO: manually copy ray-sar.out into correct log directory
 
 unset "${!SUSML_@}"

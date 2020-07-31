@@ -18,7 +18,7 @@ SUSML_SAR_PID=$!
 # OMPI_MCA_opal_event_include=poll python3 -u ./src/mpi_ddp/rnn_mpi_ddp.py 2>&1 | tee "$SUSML_DIR_PATH/$OMPI_COMM_WORLD_RANK.out"
 
 # Horovod:
-OMPI_MCA_opal_event_include=poll python3 -u ./src/horovod/rnn_horovod.py 2>&1 | tee "$SUSML_DIR_PATH/$OMPI_COMM_WORLD_RANK.out"
+# OMPI_MCA_opal_event_include=poll python3 -u ./src/horovod/rnn_horovod.py 2>&1 | tee "$SUSML_DIR_PATH/$OMPI_COMM_WORLD_RANK.out"
 
 kill $SUSML_SAR_PID
 unset "${!SUSML_@}"
