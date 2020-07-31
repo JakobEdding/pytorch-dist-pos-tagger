@@ -203,7 +203,7 @@ def train(model, iterator, optimizer, criterion, tag_pad_idx, rank, epoch):
 
     return epoch_loss / len(iterator), epoch_acc / len(iterator)
 
-def evaluate(model, iterator, criterion, tag_pad_idx):
+def evaluate(model, iterator, criterion, tag_pad_idx, method, epoch):
     epoch_loss = 0
     epoch_acc = 0
     start_time = time.time()
@@ -224,7 +224,7 @@ def evaluate(model, iterator, criterion, tag_pad_idx):
 
     end_time = time.time()
     mins, secs = diff_time(start_time, end_time)
-    print(f'Epoch {epoch+1:02} evaluate time: {mins}m {secs}s')
+    print(f'Epoch {epoch+1:02} {method} time: {mins}m {secs}s')
 
     return epoch_loss / len(iterator), epoch_acc / len(iterator)
 
@@ -271,7 +271,7 @@ def run():
         epoch_start_time = time.time()
 
         train_loss, train_acc = train(model, train_iterators[rank], optimizer, criterion, TAG_PAD_IDX, rank, epoch)
-        valid_loss, valid_acc = evaluate(model, valid_iterator, criterion, TAG_PAD_IDX)
+        valid_loss, valid_acc = evaluate(model, valid_iterator, criterion, TAG_PAD_IDX, 'valid', epoch)
 
         epoch_end_time = time.time()
         epoch_mins, epoch_secs = diff_time(epoch_start_time, epoch_end_time)
@@ -289,8 +289,7 @@ def run():
         # print('rank ', rank, ' parameters: ', sum(parameter.sum() for parameter in ddp_model.parameters()))
 
     model.load_state_dict(torch.load('../tmp_model/tut1-model.pt'))
-    print('next "evaluate" is actually test!')
-    test_loss, test_acc = evaluate(model, test_iterator, criterion, TAG_PAD_IDX)
+    test_loss, test_acc = evaluate(model, test_iterator, criterion, TAG_PAD_IDX, 'test', 'test')
     print(f'Test Loss: {test_loss:.3f} |  Test Acc: {test_acc*100:.2f}%')
 
     total_end_time = time.time()

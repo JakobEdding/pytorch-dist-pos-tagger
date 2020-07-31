@@ -169,7 +169,7 @@ class ParameterServer(object):
         return correct.sum() / torch.FloatTensor([y[non_pad_elements].shape[0]])
 
 
-    def evaluate(self, iterator):
+    def evaluate(self, iterator, method, epoch):
 
         # tag_pad_idx
 
@@ -194,7 +194,7 @@ class ParameterServer(object):
 
         end_time = time.time()
         mins, secs = diff_time(start_time, end_time)
-        print(f'Epoch {epoch+1:02} evaluate time: {mins}m {secs}s')
+        print(f'Epoch {epoch+1:02} {method} time: {mins}m {secs}s')
 
         return epoch_loss / len(iterator), epoch_acc / len(iterator)
 
@@ -211,7 +211,7 @@ class ParameterServer(object):
             train_mins, train_secs = diff_time(train_start_time, train_end_time)
             print(f'Epoch {epoch+1:02} train time: {train_mins}m {train_secs}s')
 
-            valid_loss, valid_acc = self.evaluate(self.valid_iterator)
+            valid_loss, valid_acc = self.evaluate(self.valid_iterator, 'valid', epoch)
 
             epoch_end_time = time.time()
             epoch_mins, epoch_secs = diff_time(epoch_start_time, epoch_end_time)
@@ -219,8 +219,7 @@ class ParameterServer(object):
             print(f'Epoch: {epoch+1:02} | Epoch Time: {epoch_mins}m {epoch_secs}s')
             print(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')
 
-        print('next "evaluate" is actually test!')
-        test_loss, test_acc = self.evaluate(self.test_iterator)
+        test_loss, test_acc = self.evaluate(self.test_iterator, 'test', 'test')
         print(f'Test Loss: {test_loss:.3f} |  Test Acc: {test_acc*100:.2f}%')
 
         total_end_time = time.time()
@@ -269,7 +268,7 @@ class ParameterServer(object):
             train_mins, train_secs = diff_time(train_start_time, train_end_time)
             print(f'Epoch {epoch+1:02} train time: {train_mins}m {train_secs}s')
 
-            valid_loss, valid_acc = self.evaluate(self.valid_iterator)
+            valid_loss, valid_acc = self.evaluate(self.valid_iterator, 'valid', epoch)
 
             epoch_end_time = time.time()
             epoch_mins, epoch_secs = diff_time(epoch_start_time, epoch_end_time)
@@ -277,8 +276,7 @@ class ParameterServer(object):
             print(f'Epoch: {epoch+1:02} | Epoch Time: {epoch_mins}m {epoch_secs}s')
             print(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')
 
-        print('next "evaluate" is actually test!')
-        test_loss, test_acc = self.evaluate(self.test_iterator)
+        test_loss, test_acc = self.evaluate(self.test_iterator, 'test', 'test')
         print(f'Test Loss: {test_loss:.3f} |  Test Acc: {test_acc*100:.2f}%')
 
         total_end_time = time.time()
