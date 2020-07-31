@@ -193,7 +193,7 @@ class ParameterServer(object):
                 epoch_acc += acc.item()
 
         end_time = time.time()
-        mins, secs = diff_time(start_time, end_time)
+        mins, secs = self.diff_time(start_time, end_time)
         print(f'Epoch {epoch+1:02} {method} time: {mins}m {secs}s')
 
         return epoch_loss / len(iterator), epoch_acc / len(iterator)
@@ -208,13 +208,13 @@ class ParameterServer(object):
             train_start_time = time.time()
             self.train()
             train_end_time = time.time()
-            train_mins, train_secs = diff_time(train_start_time, train_end_time)
+            train_mins, train_secs = self.diff_time(train_start_time, train_end_time)
             print(f'Epoch {epoch+1:02} train time: {train_mins}m {train_secs}s')
 
             valid_loss, valid_acc = self.evaluate(self.valid_iterator, 'valid', epoch)
 
             epoch_end_time = time.time()
-            epoch_mins, epoch_secs = diff_time(epoch_start_time, epoch_end_time)
+            epoch_mins, epoch_secs = self.self.diff_time(epoch_start_time, epoch_end_time)
 
             print(f'Epoch: {epoch+1:02} | Epoch Time: {epoch_mins}m {epoch_secs}s')
             print(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')
@@ -223,7 +223,7 @@ class ParameterServer(object):
         print(f'Test Loss: {test_loss:.3f} |  Test Acc: {test_acc*100:.2f}%')
 
         total_end_time = time.time()
-        total_mins, total_secs = diff_time(total_start_time, total_end_time)
+        total_mins, total_secs = self.diff_time(total_start_time, total_end_time)
         print(f'took overall: {total_mins}m {total_secs}s')
 
         return 1
@@ -265,13 +265,13 @@ class ParameterServer(object):
                 # print(f'Update: {iteration+1:02} | Update Time: {epoch_mins}m {epoch_secs}s')
 
             train_end_time = time.time()
-            train_mins, train_secs = diff_time(train_start_time, train_end_time)
+            train_mins, train_secs = self.diff_time(train_start_time, train_end_time)
             print(f'Epoch {epoch+1:02} train time: {train_mins}m {train_secs}s')
 
             valid_loss, valid_acc = self.evaluate(self.valid_iterator, 'valid', epoch)
 
             epoch_end_time = time.time()
-            epoch_mins, epoch_secs = diff_time(epoch_start_time, epoch_end_time)
+            epoch_mins, epoch_secs = self.diff_time(epoch_start_time, epoch_end_time)
 
             print(f'Epoch: {epoch+1:02} | Epoch Time: {epoch_mins}m {epoch_secs}s')
             print(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')
@@ -280,7 +280,7 @@ class ParameterServer(object):
         print(f'Test Loss: {test_loss:.3f} |  Test Acc: {test_acc*100:.2f}%')
 
         total_end_time = time.time()
-        total_mins, total_secs = diff_time(total_start_time, total_end_time)
+        total_mins, total_secs = self.diff_time(total_start_time, total_end_time)
         print(f'took overall: {total_mins}m {total_secs}s')
 
         return 1
