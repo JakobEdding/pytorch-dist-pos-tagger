@@ -10,7 +10,7 @@ import ray
 
 import numpy as np
 
-from bilstm_pos_tagger import BiLSTMPOSTagger
+from gru_pos_tagger import GRUPOSTagger
 
 from torchtext import data
 from torchtext import datasets
@@ -32,8 +32,6 @@ BATCH_SIZE = int(os.environ['SUSML_BATCH_SIZE'])
 LR = float(os.environ['SUSML_LR'])
 EVAL_BETWEEN_BATCHES = True if os.environ['SUSML_EVAL_BETWEEN_BATCHES'] == 'true' else False
 EVAL_EVERY_X_BATCHES = int(os.environ['SUSML_EVAL_EVERY_X_BATCHES'])
-# model
-RNN_LAYER_TYPE = os.environ['SUSML_RNN_LAYER_TYPE']
 # distribution
 PARALLELISM_LEVEL = int(os.environ['SUSML_PARALLELISM_LEVEL'])
 # print('parallelism level is', PARALLELISM_LEVEL)
@@ -44,7 +42,8 @@ torch.manual_seed(RAND_SEED)
 torch.backends.cudnn.deterministic = True
 
 # won't really use 4 cpu cores because it's limited to 3 by OMP_NUM_THREADS=3
-@ray.remote(num_cpus=4)
+# @ray.remote(num_cpus=4)
+@ray.remote(num_cpus=3)
 class DataWorker(object):
     def __init__(self, rank):
         self.rank = rank
@@ -104,7 +103,7 @@ class DataWorker(object):
         PAD_IDX = TEXT.vocab.stoi[TEXT.pad_token]
         self.TAG_PAD_IDX = UD_TAGS.vocab.stoi[UD_TAGS.pad_token]
 
-        self.model = BiLSTMPOSTagger(INPUT_DIM,
+        self.model = GRUPOSTagger(INPUT_DIM,
                         EMBEDDING_DIM,
                         HIDDEN_DIM,
                         OUTPUT_DIM,

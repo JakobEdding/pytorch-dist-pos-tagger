@@ -10,7 +10,7 @@ import ray
 
 import numpy as np
 
-from bilstm_pos_tagger import BiLSTMPOSTagger
+from gru_pos_tagger import GRUPOSTagger
 
 from torchtext import data
 from torchtext import datasets
@@ -31,8 +31,6 @@ RAND_SEED = int(os.environ['SUSML_RAND_SEED'])
 NUM_EPOCHS = int(os.environ['SUSML_NUM_EPOCHS'])
 BATCH_SIZE = int(os.environ['SUSML_BATCH_SIZE'])
 LR = float(os.environ['SUSML_LR'])
-# model
-RNN_LAYER_TYPE = os.environ['SUSML_RNN_LAYER_TYPE']
 # distribution
 PARALLELISM_LEVEL = int(os.environ['SUSML_PARALLELISM_LEVEL'])
 print('parallelism level is', PARALLELISM_LEVEL)
@@ -51,7 +49,7 @@ def run():
     )
     try:
         ps = ParameterServer.remote()
-        val = ps.run_async.remote()
+        val = ps.run.remote()
         print(ray.get(val))
     except Exception as e:
         raise e

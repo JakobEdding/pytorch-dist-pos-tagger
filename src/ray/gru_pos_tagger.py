@@ -18,8 +18,6 @@ RAND_SEED = int(os.environ['SUSML_RAND_SEED'])
 NUM_EPOCHS = int(os.environ['SUSML_NUM_EPOCHS'])
 BATCH_SIZE = int(os.environ['SUSML_BATCH_SIZE'])
 LR = float(os.environ['SUSML_LR'])
-# model
-RNN_LAYER_TYPE = os.environ['SUSML_RNN_LAYER_TYPE']
 # distribution
 PARALLELISM_LEVEL = int(os.environ['SUSML_PARALLELISM_LEVEL'])
 
@@ -28,7 +26,7 @@ random.seed(RAND_SEED)
 torch.manual_seed(RAND_SEED)
 torch.backends.cudnn.deterministic = True
 
-class BiLSTMPOSTagger(nn.Module):
+class GRUPOSTagger(nn.Module):
     def __init__(self,
                  input_dim,
                  embedding_dim,
@@ -43,20 +41,11 @@ class BiLSTMPOSTagger(nn.Module):
 
         self.embedding = nn.Embedding(input_dim, embedding_dim, padding_idx = pad_idx)
 
-        if False: # os.environ['RNN_TYPE'] == 'lstm':
-            self.rnn = nn.LSTM(embedding_dim,
-                            hidden_dim,
-                            num_layers = n_layers,
-                            bidirectional = bidirectional,
-                            dropout = dropout if n_layers > 1 else 0)
-        else: # os.environ['RNN_TYPE'] == 'gru':
-            self.rnn = nn.GRU(embedding_dim,
-                            hidden_dim,
-                            num_layers = n_layers,
-                            bidirectional = bidirectional,
-                            dropout = dropout if n_layers > 1 else 0)
-        # else:
-        #     raise Exception('has to be lstm or gru')
+        self.rnn = nn.GRU(embedding_dim,
+                        hidden_dim,
+                        num_layers = n_layers,
+                        bidirectional = bidirectional,
+                        dropout = dropout if n_layers > 1 else 0)
 
         self.fc = nn.Linear(hidden_dim * 2 if bidirectional else hidden_dim, output_dim)
 
