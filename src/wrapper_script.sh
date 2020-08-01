@@ -41,7 +41,7 @@ source ./src/env.sh
 # SAR_PID=$!
 
 # START:
-python3 src/ray/start.py 2>&1 | tee "$SUSML_DIR_PATH/0.out"
+python3 -u src/ray/start.py 2>&1 | tee "$SUSML_DIR_PATH/0.out"
 
 # STOP:
 # kill $SAR_PID
