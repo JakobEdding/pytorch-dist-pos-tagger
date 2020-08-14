@@ -140,7 +140,7 @@ class DataWorker(object):
             batch = next(self.data_iterator)
             self.batch_idx += 1
         except StopIteration:  # When the epoch ends, start a new epoch.
-            print(f'starting new epoch on rank {self.get_rank()}')
+            # print(f'starting new epoch on rank {self.get_rank()}')
             self.data_iterator = iter(self.train_iterators[self.rank])
             batch = next(self.data_iterator)
             self.batch_idx = 1
@@ -160,7 +160,7 @@ class DataWorker(object):
         loss.backward()
         # self.epoch_loss += loss.item()
         # print(f'finished computing gradients on node {self.rank}')
-        print(f'computed gradients for a batch on node {self.rank}, took {datetime.now() - before}...')
+        # print(f'computed gradients for a batch on node {self.rank}, took {datetime.now() - before}...')
 
         # TODO: assert hashes before and after evaluating of model.get_gradients() are the same!
 
