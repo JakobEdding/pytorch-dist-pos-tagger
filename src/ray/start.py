@@ -35,6 +35,7 @@ LR = float(os.environ['SUSML_LR'])
 PARALLELISM_LEVEL = int(os.environ['SUSML_PARALLELISM_LEVEL'])
 print('parallelism level is', PARALLELISM_LEVEL)
 
+print(f'RAND-TEST rand seed in start.py is {RAND_SEED}')
 random.seed(RAND_SEED)
 torch.manual_seed(RAND_SEED)
 torch.backends.cudnn.deterministic = True

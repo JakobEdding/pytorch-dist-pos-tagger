@@ -21,7 +21,7 @@ LR = float(os.environ['SUSML_LR'])
 # distribution
 PARALLELISM_LEVEL = int(os.environ['SUSML_PARALLELISM_LEVEL'])
 
-
+print(f'RAND-TEST rand seed in gru_pos_tagger.py is {RAND_SEED}')
 random.seed(RAND_SEED)
 torch.manual_seed(RAND_SEED)
 torch.backends.cudnn.deterministic = True

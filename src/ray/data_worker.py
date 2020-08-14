@@ -36,7 +36,7 @@ EVAL_EVERY_X_BATCHES = int(os.environ['SUSML_EVAL_EVERY_X_BATCHES'])
 PARALLELISM_LEVEL = int(os.environ['SUSML_PARALLELISM_LEVEL'])
 # print('parallelism level is', PARALLELISM_LEVEL)
 
-
+print(f'RAND-TEST rand seed in data_worker.py is {RAND_SEED}')
 random.seed(RAND_SEED)
 torch.manual_seed(RAND_SEED)
 torch.backends.cudnn.deterministic = True
@@ -63,6 +63,7 @@ class DataWorker(object):
         def custom_split(examples, number_of_parts):
             N = len(examples)
             randperm = random.sample(range(N), len(range(N)))
+            print(f'RAND-TEST first three elements of randperm in data_worker.py for rank {self.rank} are {randperm[:3]}')
             indices = [randperm[int(N * (part / number_of_parts)):int(N * (part+1) / number_of_parts)] for part in range(number_of_parts-1)]
             indices.append(randperm[int(N * (number_of_parts-1) / number_of_parts):])
             examples_tuple = tuple([examples[i] for i in index] for index in indices)

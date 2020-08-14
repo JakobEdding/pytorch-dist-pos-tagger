@@ -35,6 +35,7 @@ LR = float(os.environ['SUSML_LR'])
 PARALLELISM_LEVEL = int(os.environ['SUSML_PARALLELISM_LEVEL'])
 # print('parallelism level is', PARALLELISM_LEVEL)
 
+print(f'RAND-TEST rand seed in parameter_server.py is {RAND_SEED}')
 random.seed(RAND_SEED)
 torch.manual_seed(RAND_SEED)
 torch.backends.cudnn.deterministic = True
@@ -55,6 +56,7 @@ class ParameterServer(object):
         def custom_split(examples, number_of_parts):
             N = len(examples)
             randperm = random.sample(range(N), len(range(N)))
+            print(f'RAND-TEST first three elements of randperm in parameter_server.py are {randperm[:3]}')
             indices = [randperm[int(N * (part / number_of_parts)):int(N * (part+1) / number_of_parts)] for part in range(number_of_parts-1)]
             indices.append(randperm[int(N * (number_of_parts-1) / number_of_parts):])
             examples_tuple = tuple([examples[i] for i in index] for index in indices)
@@ -107,6 +109,7 @@ class ParameterServer(object):
                         PAD_IDX)
 
         self.model.apply(self.init_weights)
+        print(f'RAND-TEST hash of random-initialized model weights in parameter_server.py {hash(self.model.get_weights())}')
         # print(f'The model has {count_parameters(model):,} trainable parameters')
         self.model.embedding.weight.data[PAD_IDX] = torch.zeros(EMBEDDING_DIM)
         self.TAG_PAD_IDX = UD_TAGS.vocab.stoi[UD_TAGS.pad_token]
