@@ -250,7 +250,7 @@ class ParameterServer(object):
             batches_processed_by_worker = {worker_id: 0 for worker_id in range(PARALLELISM_LEVEL)}
 
             for iteration in range(updates):
-                print(f'Starting update {iteration+1:03}/{updates}')
+                # print(f'Starting update {iteration+1:03}/{updates}')
                 # train_loss, train_acc = train()
                 ready_gradient_list, rest = ray.wait(list(gradients))
                 if len(ready_gradient_list) == 0:

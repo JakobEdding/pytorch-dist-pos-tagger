@@ -159,8 +159,6 @@ class DataWorker(object):
         # acc = categorical_accuracy(predictions, tags, tag_pad_idx)
         loss.backward()
         # self.epoch_loss += loss.item()
-        # print(f'finished computing gradients on node {self.rank}')
-        # print(f'computed gradients for a batch on node {self.rank}, took {datetime.now() - before}...')
 
         # TODO: assert hashes before and after evaluating of model.get_gradients() are the same!
 
@@ -186,5 +184,8 @@ class DataWorker(object):
             valid_loss, valid_acc = (epoch_loss / len(self.valid_iterator), epoch_acc / len(self.valid_iterator))
             print(f'evaluating after batch {self.batch_idx} on rank {self.get_rank()}: Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc*100:.2f}%')
             self.model.train()
+
+        later = datetime.now()
+        print(f'computed gradients for a batch on node {self.rank}, took {(later-before).seconds:03}.{(later-before).microseconds}, batch is: {text}')
 
         return self.model.get_gradients()
