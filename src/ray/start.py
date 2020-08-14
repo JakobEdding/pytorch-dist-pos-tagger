@@ -41,12 +41,14 @@ torch.backends.cudnn.deterministic = True
 
 def run():
     ray.init(
+        address='localhost:6379',
         # address='192.168.178.51:6379',
-        address='auto',
-        ignore_reinit_error=True,
-        webui_host='0.0.0.0',
+        # address='auto',
+        # ignore_reinit_error=True,
+        # webui_host='0.0.0.0',
         redis_password='5241590000000000'
     )
+    print('done with init')
     try:
         ps = ParameterServer.remote()
         val = ps.run.remote()

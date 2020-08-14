@@ -44,7 +44,7 @@ provider:
 # How Ray will authenticate with newly launched nodes.
 auth:
     ssh_user: pi
-    ssh_private_key: ./id_rsa
+    ssh_private_key: ./remote_repo/id_rsa
 
 # Leave this empty.
 head_node: {}
@@ -84,6 +84,9 @@ head_start_ray_commands:
     - echo "doing stuff on head"
     - export RAY_HEAD_IP='192.168.178.51'
     - echo "head ip $RAY_HEAD_IP $SHELL"
+    # this below throws no such file or directory
+    # - cat ~/ray_config.yaml
+    - cat ~/ray_bootstrap_config.yaml
     - ulimit -c unlimited && source ~/env.sh && OMP_NUM_THREADS=3 ray start --head --port=6379 --webui-host=0.0.0.0 --autoscaling-config=~/ray_bootstrap_config.yaml
 
 # Command to start ray on worker nodes. You don't need to change this.
