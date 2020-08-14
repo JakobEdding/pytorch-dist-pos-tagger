@@ -109,7 +109,7 @@ class ParameterServer(object):
                         PAD_IDX)
 
         self.model.apply(self.init_weights)
-        print(f'RAND-TEST hash of random-initialized model weights in parameter_server.py {hash(self.model.get_weights())}')
+        print(f'RAND-TEST hash of random-initialized model weights in parameter_server.py {hash(str(self.model.get_weights()))}, full weight dict: {self.model.get_weights()}')
         # print(f'The model has {count_parameters(model):,} trainable parameters')
         self.model.embedding.weight.data[PAD_IDX] = torch.zeros(EMBEDDING_DIM)
         self.TAG_PAD_IDX = UD_TAGS.vocab.stoi[UD_TAGS.pad_token]
