@@ -186,6 +186,11 @@ class DataWorker(object):
             self.model.train()
 
         later = datetime.now()
-        print(f'computed gradients for a batch on node {self.rank}, took {(later-before).seconds:03}.{(later-before).microseconds}, batch is: {text}')
+        sequence_lengths = []
+        for data_example in text:
+            # remove padding
+            sequence_lengths.append(len(list(filter(lambda x: x != 1, data_example))))
+        summed_length_of_sequences = sum(sequence_lengths)
+        print(f'computed gradients for a batch on node {self.rank}, took {(later-before).seconds:03}.{(later-before).microseconds}, summed length of batch sequences: {summed_length_of_sequences}, individual lengths: {sequence_lengths}')
 
         return self.model.get_gradients()
