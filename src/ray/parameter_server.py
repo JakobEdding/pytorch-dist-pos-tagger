@@ -10,7 +10,7 @@ import ray
 
 import numpy as np
 
-from gru_pos_tagger import GRUPOSTagger
+from ray_gru_pos_tagger_model import RayGRUPOSTaggerModel
 
 from torchtext import data
 from torchtext import datasets
@@ -40,89 +40,31 @@ random.seed(RAND_SEED)
 torch.manual_seed(RAND_SEED)
 torch.backends.cudnn.deterministic = True
 
+from common.distributed_trainer import DistributedTrainer
+
 @ray.remote(num_cpus=1)
-class ParameterServer(object):
+class ParameterServer(DistributedTrainer):
     def __init__(self):
         self.workers = [DataWorker.remote(i) for i in range(PARALLELISM_LEVEL)]
 
-        TEXT = data.Field(lower = True)  # can have unknown tokens
-        UD_TAGS = data.Field(unk_token = None)  # can't have unknown tags
-
-        fields = (("text", TEXT), ("udtags", UD_TAGS), (None, None))
-
-        train_data, valid_data, test_data = datasets.UDPOS.splits(fields, root='/home/pi/.data')
-
-        # inspired by torchtext internals because their splits method is limited to 3 workers... https://github.com/pytorch/text/blob/e70955309ead681f924fecd36d759c37e3fdb1ee/torchtext/data/dataset.py#L325
-        def custom_split(examples, number_of_parts):
-            N = len(examples)
-            randperm = random.sample(range(N), len(range(N)))
-            print(f'RAND-TEST first three elements of randperm in parameter_server.py are {randperm[:3]}')
-            indices = [randperm[int(N * (part / number_of_parts)):int(N * (part+1) / number_of_parts)] for part in range(number_of_parts-1)]
-            indices.append(randperm[int(N * (number_of_parts-1) / number_of_parts):])
-            examples_tuple = tuple([examples[i] for i in index] for index in indices)
-            splits = tuple(data.dataset.Dataset(elem, examples.fields) for elem in examples_tuple if elem)
-            # In case the parent sort key isn't none
-            if examples.sort_key:
-                for subset in splits:
-                    subset.sort_key = examples.sort_key
-            return splits
-
-        train_data_tuple = custom_split(train_data, PARALLELISM_LEVEL)
-
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        self.train_iterators = data.BucketIterator.splits(
-            train_data_tuple,
-            batch_size = BATCH_SIZE,
-            device = device)
-
-        self.valid_iterator, self.test_iterator = data.BucketIterator.splits(
-            (valid_data, test_data),
-            batch_size = BATCH_SIZE,
-            device = device)
-
-        TEXT.build_vocab(train_data, min_freq = MIN_FREQ)
-
-        UD_TAGS.build_vocab(train_data)
-
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-        INPUT_DIM = len(TEXT.vocab)
-
-        EMBEDDING_DIM = 100
-        HIDDEN_DIM = 128
-
-        OUTPUT_DIM = len(UD_TAGS.vocab)
-        N_LAYERS = 2
-        BIDIRECTIONAL = False
-        DROPOUT = 0.25
-        PAD_IDX = TEXT.vocab.stoi[TEXT.pad_token]
-
-
-        self.model = GRUPOSTagger(INPUT_DIM,
-                        EMBEDDING_DIM,
-                        HIDDEN_DIM,
-                        OUTPUT_DIM,
-                        N_LAYERS,
-                        BIDIRECTIONAL,
-                        DROPOUT,
-                        PAD_IDX)
+        self.model = RayGRUPOSTaggerModel(self.INPUT_DIM,
+                        self.EMBEDDING_DIM,
+                        self.HIDDEN_DIM,
+                        self.OUTPUT_DIM,
+                        self.N_LAYERS,
+                        self.BIDIRECTIONAL,
+                        self.DROPOUT,
+                        self.PAD_IDX)
 
         self.model.apply(self.init_weights)
         print(f'RAND-TEST hash of random-initialized model weights in parameter_server.py {hash(str(self.model.get_weights()))}')
-        # print(f'The model has {count_parameters(model):,} trainable parameters')
-        self.model.embedding.weight.data[PAD_IDX] = torch.zeros(EMBEDDING_DIM)
-        self.TAG_PAD_IDX = UD_TAGS.vocab.stoi[UD_TAGS.pad_token]
+        self.model.embedding.weight.data[self.PAD_IDX] = torch.zeros(self.EMBEDDING_DIM)
 
-        self.criterion = nn.CrossEntropyLoss(ignore_index = self.TAG_PAD_IDX)
+        self.criterion = nn.CrossEntropyLoss(ignore_index=self.TAG_PAD_IDX)
 
-        self.optimizer = optim.Adam(self.model.parameters(),lr=LR)
-
-    def diff_time(self, start_time, end_time):
-        elapsed_time = end_time - start_time
-        elapsed_mins = int(elapsed_time / 60)
-        elapsed_secs = int(elapsed_time - (elapsed_mins * 60))
-        return elapsed_mins, elapsed_secs
+        self.optimizer = optim.Adam(self.model.parameters(), lr=LR)
 
     def apply_gradients(self, *gradients):
         summed_gradients = [
@@ -137,15 +79,7 @@ class ParameterServer(object):
     def get_weights(self):
         return self.model.get_weights()
 
-    def init_weights(self, m):
-        for name, param in m.named_parameters():
-            nn.init.normal_(param.data, mean = 0, std = 0.1)
-
     def train(self):
-        # model, train_iterators[0], optimizer, criterion, TAG_PAD_IDX, rank, epoch
-        # epoch_loss = 0
-        # epoch_acc = 0
-
         self.model.train()
 
         current_weights = self.get_weights()
@@ -162,20 +96,7 @@ class ParameterServer(object):
 
         # return epoch_loss / len(iterator), epoch_acc / len(iterator)
 
-    def categorical_accuracy(self, preds, y):
-        """
-        Returns accuracy per batch, i.e. if you get 8/10 right, this returns 0.8, NOT 8
-        """
-        max_preds = preds.argmax(dim = 1, keepdim = True) # get the index of the max probability
-        non_pad_elements = (y != self.TAG_PAD_IDX).nonzero()
-        correct = max_preds[non_pad_elements].squeeze(1).eq(y[non_pad_elements])
-        return correct.sum() / torch.FloatTensor([y[non_pad_elements].shape[0]])
-
-
     def evaluate(self, iterator, method, epoch):
-
-        # tag_pad_idx
-
         epoch_loss = 0
         epoch_acc = 0
         start_time = time.time()
@@ -233,9 +154,7 @@ class ParameterServer(object):
 
     def run_async(self):
         total_start_time = time.time()
-
         current_weights = self.get_weights()
-
 
         updates = len(self.train_iterators[0]) * len(self.workers)
         for epoch in range(NUM_EPOCHS):

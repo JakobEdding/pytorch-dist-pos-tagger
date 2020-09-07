@@ -10,8 +10,6 @@ import ray
 
 import numpy as np
 
-from gru_pos_tagger import GRUPOSTagger
-
 from torchtext import data
 from torchtext import datasets
 from tqdm import tqdm

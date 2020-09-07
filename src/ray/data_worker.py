@@ -10,7 +10,7 @@ import ray
 
 import numpy as np
 
-from gru_pos_tagger import GRUPOSTagger
+from ray_gru_pos_tagger_model import RayGRUPOSTaggerModel
 
 from torchtext import data
 from torchtext import datasets
@@ -41,70 +41,20 @@ random.seed(RAND_SEED)
 torch.manual_seed(RAND_SEED)
 torch.backends.cudnn.deterministic = True
 
+from common.distributed_trainer import DistributedTrainer
+
 # won't really use 4 cpu cores because it's limited to 3 by OMP_NUM_THREADS=3
 # @ray.remote(num_cpus=4)
 @ray.remote(num_cpus=3)
-class DataWorker(object):
+class DataWorker(DistributedTrainer):
     def __init__(self, rank):
         self.rank = rank
         self.epoch_loss = 0
         self.epoch_acc = 0
         self.batch_idx = 1
 
-        TEXT = data.Field(lower = True)  # can have unknown tokens
-        UD_TAGS = data.Field(unk_token = None)  # can't have unknown tags
 
-        # don't load PTB tags
-        fields = (("text", TEXT), ("udtags", UD_TAGS), (None, None))
-
-        train_data, valid_data, test_data = datasets.UDPOS.splits(fields, root='/home/pi/.data')
-
-        # inspired by torchtext internals because their splits method is limited to 3 workers... https://github.com/pytorch/text/blob/e70955309ead681f924fecd36d759c37e3fdb1ee/torchtext/data/dataset.py#L325
-        def custom_split(examples, number_of_parts):
-            N = len(examples)
-            randperm = random.sample(range(N), len(range(N)))
-            print(f'RAND-TEST first three elements of randperm in data_worker.py for rank {self.rank} are {randperm[:3]}')
-            indices = [randperm[int(N * (part / number_of_parts)):int(N * (part+1) / number_of_parts)] for part in range(number_of_parts-1)]
-            indices.append(randperm[int(N * (number_of_parts-1) / number_of_parts):])
-            examples_tuple = tuple([examples[i] for i in index] for index in indices)
-            splits = tuple(data.dataset.Dataset(elem, examples.fields) for elem in examples_tuple if elem)
-            # In case the parent sort key isn't none
-            if examples.sort_key:
-                for subset in splits:
-                    subset.sort_key = examples.sort_key
-            return splits
-
-        train_data_tuple = custom_split(train_data, PARALLELISM_LEVEL)
-
-        TEXT.build_vocab(train_data, min_freq = MIN_FREQ)
-
-        UD_TAGS.build_vocab(train_data)
-
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-        self.train_iterators = data.BucketIterator.splits(
-            train_data_tuple,
-            batch_size = BATCH_SIZE,
-            device = device)
-
-        self.valid_iterator, test_iterator = data.BucketIterator.splits(
-            (valid_data, test_data),
-            batch_size = BATCH_SIZE,
-            device = device)
-
-        INPUT_DIM = len(TEXT.vocab)
-
-        EMBEDDING_DIM = 100
-        HIDDEN_DIM = 128
-
-        OUTPUT_DIM = len(UD_TAGS.vocab)
-        N_LAYERS = 2
-        BIDIRECTIONAL = False
-        DROPOUT = 0.25
-        PAD_IDX = TEXT.vocab.stoi[TEXT.pad_token]
-        self.TAG_PAD_IDX = UD_TAGS.vocab.stoi[UD_TAGS.pad_token]
-
-        self.model = GRUPOSTagger(INPUT_DIM,
+        self.model = RayGRUPOSTaggerModel(INPUT_DIM,
                         EMBEDDING_DIM,
                         HIDDEN_DIM,
                         OUTPUT_DIM,
@@ -122,15 +72,6 @@ class DataWorker(object):
 
     def get_rank(self):
         return self.rank
-
-    def categorical_accuracy(self, preds, y):
-        """
-        Returns accuracy per batch, i.e. if you get 8/10 right, this returns 0.8, NOT 8
-        """
-        max_preds = preds.argmax(dim = 1, keepdim = True) # get the index of the max probability
-        non_pad_elements = (y != self.TAG_PAD_IDX).nonzero()
-        correct = max_preds[non_pad_elements].squeeze(1).eq(y[non_pad_elements])
-        return correct.sum() / torch.FloatTensor([y[non_pad_elements].shape[0]])
 
     def compute_gradients(self, weights):
         # print(f'computing gradients for a batch on node {self.rank} at {datetime.now()}...')
