@@ -13,6 +13,10 @@ git diff --staged > "$SUSML_DIR_PATH/git_diff_staged.txt"
 
 source ./src/env.sh
 
+# NON-DISTRIBUTED:
+python3 -u src/non_distributed/non_distributed.py 2>&1 | tee "$SUSML_DIR_PATH/0.out"
+
+
 # MPI:
 # mpirun -x SUSML_DIR_PATH=$SUSML_DIR_PATH -n $SUSML_PARALLELISM_LEVEL --map-by socket:pe=3 -hostfile ./hostfile --mca orte_fork_agent bash ./src/train_eval_test.sh
 
@@ -41,7 +45,7 @@ source ./src/env.sh
 # SAR_PID=$!
 
 # START:
-python3 -u src/ray/start.py 2>&1 | tee "$SUSML_DIR_PATH/0.out"
+# python3 -u src/ray/start.py 2>&1 | tee "$SUSML_DIR_PATH/0.out"
 
 # STOP:
 # kill $SAR_PID
