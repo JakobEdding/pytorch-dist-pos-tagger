@@ -20,8 +20,9 @@ pip install -r requirements.txt
 1. Adapt `./hostfile` to contain all nodes that should partake in training.
 2. Adapt `./src/env.sh` to reflect desired training parameters, specifically set parallelism to number of nodes in cluster.
 3. Uncomment relevant section for approach in `./src/wrapper_script.sh`. Make sure, path to environment matches your local settings.
-4. a) **For Ray:** Follow instructions in wrapper script to start the ray cluster. (Do this before starting the wrapper script!)
-4. b) **For MPI approaches:** Uncomment relevant section in `./src/train_eval_test.sh`. Make sure, path to environment matches your local settings.
+4. Next:
+    - **For Ray:** Follow instructions in wrapper script to start the ray cluster, i.e. start head process on head node and join this processes ray cluster on all other nodes. (Do this before starting the wrapper script!). Plus, choose asynchronous or synchronous approach by selecting in `./scr/ray/start.py#L53`.
+    - **For MPI approaches:** Uncomment relevant section in `./src/train_eval_test.sh`. Make sure, path to environment matches your local settings.
 6. Start training by running `./src/wrapper_script.sh` from your head node.
 
 ## Running approaches with CPU profiling
@@ -30,10 +31,10 @@ To activate the additional CPU profiling, make sure to uncomment the lines start
 
 ## Results
 
-Results may be archived in the log directory specified in the wrapper script; per default this is `./logs/START_TIMESTAMP`.
+Results are written to the log directory specified in the wrapper script; per default this is `./logs/START_TIMESTAMP`.
 
 This includes:
-- the current repository state with commit hash and changes
+- the current repository state with commit status, hash, and changes
 - logs containing e.g. evaluation results
 - CPU profiling results
 
