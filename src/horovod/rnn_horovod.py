@@ -56,8 +56,6 @@ class RNNHorovod(DistributedTrainer):
 
         hvd.broadcast_parameters(local_model.state_dict(), root_rank=0)
 
-        # model.to(device)
-
         print('rank ', rank, ' initial_model: ', sum(parameter.sum() for parameter in local_model.parameters()))
         # construct DDP model
         #ddp_model = DDP(local_model)
@@ -68,7 +66,8 @@ class RNNHorovod(DistributedTrainer):
         # criterion = criterion.to(device)
         optimizer = optim.Adam(model.parameters(), lr=LR)
 
-        optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters(), op=hvd.Average)
+        # optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters(), op=hvd.Average)
+        optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters(), op=hvd.Adasum)
 
         best_valid_loss = float('inf')
         total_start_time = time.time()
