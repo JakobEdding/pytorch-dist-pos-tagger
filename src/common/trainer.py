@@ -1,15 +1,10 @@
+from datetime import datetime
+import os
 import time
 import random
-import sys
-import os
 
 import torch
-import torch.distributed as dist
-import torch.multiprocessing as mp
 import torch.nn as nn
-import torch.optim as optim
-from torch.nn.parallel import DistributedDataParallel as DDP
-
 from torchtext import data
 from torchtext import datasets
 from tqdm import tqdm
@@ -17,14 +12,11 @@ from tqdm import tqdm
 from common.model.gru_pos_tagger_model import GRUPOSTaggerModel
 
 
-# preprocessing
 MIN_FREQ = int(os.environ['SUSML_MIN_FREQ'])
-# training
 RAND_SEED = int(os.environ['SUSML_RAND_SEED'])
 NUM_EPOCHS = int(os.environ['SUSML_NUM_EPOCHS'])
 BATCH_SIZE = int(os.environ['SUSML_BATCH_SIZE'])
 LR = float(os.environ['SUSML_LR'])
-# distribution
 PARALLELISM_LEVEL = int(os.environ['SUSML_PARALLELISM_LEVEL'])
 
 random.seed(RAND_SEED)
@@ -32,32 +24,31 @@ torch.manual_seed(RAND_SEED)
 torch.backends.cudnn.deterministic = True
 
 
-class DistributedTrainer(object):
+class Trainer(object):
     def __init__(self):
-        self.TEXT = data.Field(lower = True)  # can have unknown tokens
-        self.UD_TAGS = data.Field(unk_token = None)  # can't have unknown tags
+        self.TEXT = data.Field(lower=True)  # can have unknown tokens
+        self.UD_TAGS = data.Field(unk_token=None)  # can't have unknown tags
 
-        # don't load PTB tags
         self.fields = (("text", self.TEXT), ("udtags", self.UD_TAGS), (None, None))
 
         train_data, valid_data, test_data = datasets.UDPOS.splits(self.fields, root='/home/pi/.data')
         train_data_tuple = self.split_data_arbitrary_splits(train_data, PARALLELISM_LEVEL)
 
-        self.TEXT.build_vocab(train_data, min_freq = MIN_FREQ)
+        self.TEXT.build_vocab(train_data, min_freq=MIN_FREQ)
 
         self.UD_TAGS.build_vocab(train_data)
 
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         self.train_iterators = data.BucketIterator.splits(
             train_data_tuple,
             batch_size=BATCH_SIZE,
-            device=device)
+            device=self.device)
 
         self.valid_iterator, self.test_iterator = data.BucketIterator.splits(
             (valid_data, test_data),
             batch_size=BATCH_SIZE,
-            device=device)
+            device=self.device)
 
         self.INPUT_DIM = len(self.TEXT.vocab)
 
@@ -71,6 +62,17 @@ class DistributedTrainer(object):
         self.PAD_IDX = self.TEXT.vocab.stoi[self.TEXT.pad_token]
 
         self.TAG_PAD_IDX = self.UD_TAGS.vocab.stoi[self.UD_TAGS.pad_token]
+
+        self.model = GRUPOSTaggerModel(self.INPUT_DIM,
+                                       self.EMBEDDING_DIM,
+                                       self.HIDDEN_DIM,
+                                       self.OUTPUT_DIM,
+                                       self.N_LAYERS,
+                                       self.BIDIRECTIONAL,
+                                       self.DROPOUT,
+                                       self.PAD_IDX)
+        self.optimizer = None
+        self.criterion = nn.CrossEntropyLoss(ignore_index=self.TAG_PAD_IDX)
 
     def init_weights(self, m):
         for name, param in m.named_parameters():
@@ -108,30 +110,49 @@ class DistributedTrainer(object):
         elapsed_secs = int(elapsed_time - (elapsed_mins * 60))
         return elapsed_mins, elapsed_secs
 
-    def train(self, model, iterator, optimizer, criterion, tag_pad_idx, rank, epoch):
+    def iterate_epochs(self, rank):
+        best_valid_loss = float('inf')
+
+        for epoch in range(NUM_EPOCHS):
+            print(f'Starting epoch {epoch + 1:02}')
+            epoch_start_time = time.time()
+
+            train_loss, train_acc = self.train(rank, epoch)
+            valid_loss, valid_acc = self.evaluate(self.valid_iterator, 'valid', epoch)
+
+            epoch_end_time = time.time()
+            epoch_mins, epoch_secs = self.diff_time(epoch_start_time, epoch_end_time)
+
+            if valid_loss < best_valid_loss:
+                best_valid_loss = valid_loss
+                if not os.path.exists('../tmp_model'):
+                    os.makedirs('../tmp_model')
+                # save model outside directory that could be sshfs-mounted
+                torch.save(self.model.state_dict(), '../tmp_model/model.pt')
+
+            print(f'Epoch: {epoch + 1:02} | Epoch Time: {epoch_mins}m {epoch_secs}s')
+            print(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc * 100:.2f}%')
+            print(f'\t Val. Loss: {valid_loss:.3f} |  Val. Acc: {valid_acc * 100:.2f}%')
+
+    def train(self, rank, epoch):
         epoch_loss = 0
         epoch_acc = 0
         start_time = time.time()
 
-        model.train()
+        self.model.train()
 
-        for batch_idx, batch in tqdm(enumerate(iterator), desc=f'Rank {rank} processing epoch {epoch+1} ...'):
+        for batch_idx, batch in tqdm(enumerate(self.train_iterators[rank]), desc=f'Rank {rank} processing epoch {epoch+1} ...'):
             text = batch.text
             tags = batch.udtags
-            optimizer.zero_grad()
-            #text = [sent len, batch size]
-            predictions = model(text)
-            #predictions = [sent len, batch size, output dim]
-            #tags = [sent len, batch size]
+            self.optimizer.zero_grad()
+            predictions = self.model(text)
             predictions = predictions.view(-1, predictions.shape[-1])
             tags = tags.view(-1)
-            #predictions = [sent len * batch size, output dim]
-            #tags = [sent len * batch size]
-            loss = criterion(predictions, tags)
+            loss = self.criterion(predictions, tags)
             acc = self.categorical_accuracy(predictions, tags)
             print(f'Epoch: {epoch+1}, batch {batch_idx}, rank: {rank} | {str(datetime.now())} | Done with batch')
             loss.backward()
-            optimizer.step()
+            self.optimizer.step()
             epoch_loss += loss.item()
             epoch_acc += acc.item()
 
@@ -139,29 +160,35 @@ class DistributedTrainer(object):
         mins, secs = self.diff_time(start_time, end_time)
         print(f'Epoch {epoch+1:02} train time: {mins}m {secs}s')
 
-        return epoch_loss / len(iterator), epoch_acc / len(iterator)
+        return epoch_loss / len(self.train_iterators[rank]), epoch_acc / len(self.train_iterators[rank])
 
-    def evaluate(self, model, iterator, criterion, tag_pad_idx, method, epoch):
+    def evaluate(self, iterator, method, epoch, silent=False):
         epoch_loss = 0
         epoch_acc = 0
         start_time = time.time()
 
-        model.eval()
+        self.model.eval()
 
         with torch.no_grad():
             for batch in iterator:
                 text = batch.text
                 tags = batch.udtags
-                predictions = model(text)
+                predictions = self.model(text)
                 predictions = predictions.view(-1, predictions.shape[-1])
                 tags = tags.view(-1)
-                loss = criterion(predictions, tags)
-                acc = self.categorical_accuracy(predictions, tags, tag_pad_idx)
+                loss = self.criterion(predictions, tags)
+                acc = self.categorical_accuracy(predictions, tags)
                 epoch_loss += loss.item()
                 epoch_acc += acc.item()
 
         end_time = time.time()
         mins, secs = self.diff_time(start_time, end_time)
-        print(f'Epoch {epoch+1:02} {method} time: {mins}m {secs}s')
+        if not silent:
+            print(f'Epoch {epoch+1:02} {method} time: {mins}m {secs}s')
 
         return epoch_loss / len(iterator), epoch_acc / len(iterator)
+
+    def test(self):
+        self.model.load_state_dict(torch.load('../tmp_model/model.pt'))
+        test_loss, test_acc = self.evaluate(self.test_iterator, 'test', -1)
+        print(f'Test Loss: {test_loss:.3f} |  Test Acc: {test_acc * 100:.2f}%')
